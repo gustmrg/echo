@@ -2,7 +2,9 @@ using Echo.API.Extensions;
 using Echo.Application.Interfaces;
 using Echo.Application.Services;
 using Echo.Application.Settings;
+using Echo.Domain.Interfaces;
 using Echo.Infrastructure;
+using Echo.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
@@ -15,12 +17,15 @@ builder.Services.AddOptions<JwtSettings>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
-builder.Services.AddScoped<IIdentityService, IdentityService>();
-builder.Services.AddScoped<ITokenService, TokenService>();
-
 builder.Services.AddDbContext<AppDbContext>(options => 
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
         .UseSnakeCaseNamingConvention());
+
+builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<AppDbContext>());
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+
+builder.Services.AddScoped<IIdentityService, IdentityService>();
+builder.Services.AddScoped<ITokenService, TokenService>();
 
 var app = builder.Build();
 
