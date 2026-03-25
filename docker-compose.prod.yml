@@ -1,0 +1,12 @@
+services:
+  api:
+    image: ${ECHO_API_IMAGE:-gustmrg/echo-api:latest}
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+
+  postgres:
+    restart: unless-stopped
+
+  minio:
+    restart: unless-stopped
