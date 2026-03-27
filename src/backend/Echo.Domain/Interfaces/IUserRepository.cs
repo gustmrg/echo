@@ -14,6 +14,14 @@ public interface IUserRepository
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The <see cref="User"/> if found; otherwise <c>null</c>.</returns>
     Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Retrieves a user by their unique identifier.
+    /// </summary>
+    /// <param name="auth0Id">The user's unique identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The <see cref="User"/> if found; otherwise <c>null</c>.</returns>
+    Task<User?> GetByAuth0IdAsync(string auth0Id, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Retrieves a user by their email address.

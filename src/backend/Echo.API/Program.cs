@@ -1,4 +1,5 @@
 using Echo.API.Extensions;
+using Echo.API.Middlewares;
 using Echo.Application.Interfaces;
 using Echo.Application.Services;
 using Echo.Application.Settings;
@@ -17,6 +18,14 @@ builder.Services.AddOptions<JwtSettings>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+builder.Services.AddOptions<Auth0Settings>()
+    .BindConfiguration(Auth0Settings.SectionName)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddAuth0Authentication();
+builder.Services.AddAuthorization();
+
 builder.Services.AddDbContext<AppDbContext>(options => 
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
         .UseSnakeCaseNamingConvention());
@@ -25,7 +34,6 @@ builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<AppDbContext
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
 builder.Services.AddScoped<IIdentityService, IdentityService>();
-builder.Services.AddScoped<ITokenService, TokenService>();
 
 var app = builder.Build();
 
@@ -36,5 +44,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.UseMiddleware<CurrentUserMiddleware>();
 
 app.Run();

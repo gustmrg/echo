@@ -4,26 +4,26 @@ public class User
 {
     private User() { }
 
-    private User(string email, string passwordHash)
+    private User(string email, string auth0Id)
     {
         Id = Guid.CreateVersion7();
+        Auth0Id = auth0Id;
         Email = email;
-        PasswordHash = passwordHash;
         CreatedAt = DateTime.UtcNow;
     }
     
     public Guid Id { get; set; }
     public string Email { get; set; } = null!;
-    public string PasswordHash { get; set; } = null!;
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string Auth0Id { get; set; } = null!;
 
-    public static User Create(string email, string passwordHash)
+    public static User Create(string email, string auth0Id)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
-        ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
+        ArgumentException.ThrowIfNullOrWhiteSpace(auth0Id);
         
-        return new User(email, passwordHash);
+        return new User(email, auth0Id);
     }
     
     public void UpdateEmail(string email)

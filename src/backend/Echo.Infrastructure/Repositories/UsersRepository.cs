@@ -6,10 +6,14 @@ namespace Echo.Infrastructure.Repositories;
 
 public class UserRepository(AppDbContext dbContext) : IUserRepository
 {
-
     public async Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await dbContext.Users.FindAsync([id], cancellationToken: cancellationToken);
+    }
+
+    public async Task<User?> GetByAuth0IdAsync(string auth0Id, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Auth0Id == auth0Id, cancellationToken);
     }
 
     public async Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
