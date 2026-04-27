@@ -1,8 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Echo.Application.Settings;
+namespace Echo.Application.Options;
 
-public class JwtSettings
+public class JwtOptions
 {
     public const string SectionName = "Jwt";
 

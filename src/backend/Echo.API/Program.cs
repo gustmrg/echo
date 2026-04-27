@@ -2,10 +2,12 @@ using Echo.API.Extensions;
 using Echo.API.Middlewares;
 using Echo.Application.Interfaces;
 using Echo.Application.Services;
-using Echo.Application.Settings;
+using Echo.Application.Options;
 using Echo.Domain.Interfaces;
 using Echo.Infrastructure;
+using Echo.Infrastructure.Options;
 using Echo.Infrastructure.Repositories;
+using Echo.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
@@ -13,13 +15,18 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApiDocumentation();
 
-builder.Services.AddOptions<JwtSettings>()
-    .BindConfiguration(JwtSettings.SectionName)
+builder.Services.AddOptions<JwtOptions>()
+    .BindConfiguration(JwtOptions.SectionName)
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
-builder.Services.AddOptions<Auth0Settings>()
-    .BindConfiguration(Auth0Settings.SectionName)
+builder.Services.AddOptions<Auth0Options>()
+    .BindConfiguration(Auth0Options.SectionName)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddOptions<S3Options>()
+    .BindConfiguration(S3Options.SectionName)
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
@@ -34,6 +41,7 @@ builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<AppDbContext
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
 builder.Services.AddScoped<IIdentityService, IdentityService>();
+builder.Services.AddScoped<IFileStorageService, S3FileStorageService>();
 
 var app = builder.Build();
 
