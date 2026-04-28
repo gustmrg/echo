@@ -22,6 +22,74 @@ namespace Echo.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Echo.Domain.Entities.Recording", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("DurationInSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_in_seconds");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("failure_reason");
+
+                    b.Property<string>("FileExtension")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("file_extension");
+
+                    b.Property<int>("FileSizeBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("file_size_bytes");
+
+                    b.Property<string>("S3Key")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("s3key");
+
+                    b.Property<string>("S3Url")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("s3url");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_recordings");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_recordings_created_at");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_recordings_status");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_recordings_user_id");
+
+                    b.ToTable("recordings", (string)null);
+                });
+
             modelBuilder.Entity("Echo.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
