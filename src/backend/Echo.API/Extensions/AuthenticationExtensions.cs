@@ -1,4 +1,4 @@
-using Echo.Application.Settings;
+using Echo.Application.Options;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
 
@@ -8,7 +8,7 @@ public static class AuthenticationExtensions
 {
     public static IServiceCollection AddAuth0Authentication(this IServiceCollection services)
     {
-        var auth0Settings = services.BuildServiceProvider().GetRequiredService<IOptions<Auth0Settings>>().Value;
+        var auth0Settings = services.BuildServiceProvider().GetRequiredService<IOptions<Auth0Options>>().Value;
         
         services.AddAuthentication(options =>
         {
