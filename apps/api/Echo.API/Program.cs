@@ -1,18 +1,10 @@
-using Echo.API.Database;
+using Echo.API.Extensions;
 using Echo.API.Features.Recordings;
-using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDbContext<EchoDbContext>(options =>
-{
-    if (builder.Environment.IsDevelopment())
-    {
-        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-        options.UseSqlite(connectionString);
-    }
-});
+builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
