@@ -1,5 +1,6 @@
 using Echo.API.Extensions;
 using Echo.API.Middlewares;
+using Echo.API.Services;
 using Echo.Application.Interfaces;
 using Echo.Application.Services;
 using Echo.Application.Options;
@@ -20,6 +21,10 @@ builder.Services.AddAuthorization();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddScoped<IIdentityService, IdentityService>();
+builder.Services.AddScoped<IRecordingService, RecordingService>();
+builder.Services.AddSingleton<IAudioContentValidator, AudioContentValidator>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 
 builder.Services.AddControllers();
 

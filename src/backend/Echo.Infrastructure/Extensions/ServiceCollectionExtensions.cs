@@ -51,6 +51,7 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<AppDbContext>());
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRecordingRepository, RecordingRepository>();
         
         services.AddSingleton<IFileStorageService, S3FileStorageService>();
 

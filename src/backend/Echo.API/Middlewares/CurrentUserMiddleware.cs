@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Echo.API.Services;
 using Echo.Domain.Entities;
 using Echo.Domain.Interfaces;
 
@@ -26,7 +27,7 @@ public class CurrentUserMiddleware(RequestDelegate next)
                     await unitOfWork.SaveChangesAsync();
                 }
 
-                context.Items["CurrentUser"] = user;
+                context.Items[CurrentUserAccessor.CurrentUserItemKey] = user;
             }
         }
 
