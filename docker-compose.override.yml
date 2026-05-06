@@ -5,7 +5,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
     volumes:
-      - ./src/backend:/app/src/backend
+      - ./apps/api:/src
 
   postgres:
     ports:
