@@ -1,9 +1,10 @@
+using Echo.API.Shared;
+
 namespace Echo.API.Features.Recordings;
 
 public static class CreateRecording
 {
-    private const int MaxFileSize = 5 * 1024 * 1024;
-    private static readonly string[] AllowedTypes = ["audio/webm", "audio/mp4", "audio/mpeg", "audio/wav"];
+    private const int MaxFileSize = 25 * 1024 * 1024;
 
     public static async Task<IResult> Handle(IFormFile file)
     {
@@ -11,12 +12,16 @@ public static class CreateRecording
             return Results.BadRequest("File is empty");
         
         if (file.Length > MaxFileSize)
-            return Results.BadRequest("File exceeds 50MB limit.");
+            return Results.BadRequest("File exceeds 25MB limit.");
         
-        if (!AllowedTypes.Contains(file.ContentType))
+        if (!AudioFileValidator.IsSupportedContentType(file.ContentType))
             return Results.BadRequest("Unsupported audio format.");
         
         // validate file before uploading
+        using var stream = file.OpenReadStream();
+        if (!await AudioFileValidator.IsValidAudioFileAsync(stream, file.ContentType))
+            return Results.BadRequest("File content does not match its declared type.");
+        
         // upload file to s3/minio
         // save recording
         // queue transcription job
