@@ -1,8 +1,8 @@
 services:
   api:
     build:
-      context: .
-      dockerfile: src/backend/Echo.API/Dockerfile
+      context: ./apps/api
+      dockerfile: Dockerfile
     environment:
       ConnectionStrings__Default: "Host=postgres;Port=5432;Database=echo;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
       Storage__Endpoint: "http://minio:9000"
