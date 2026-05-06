@@ -7,7 +7,7 @@ public static class RecordingEndpoints
         var group = endpoints.MapGroup("recordings")
             .WithTags("Recordings");
 
-        group.MapPost("/", () => { })
+        group.MapPost("/", CreateRecording.Handle)
             .WithName("CreateRecording")
             .WithSummary("Create a recording")
             .WithDescription("Creates a new recording entry.")
