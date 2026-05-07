@@ -16,6 +16,6 @@ public class Recording
     public int FileSizeBytes { get; set; }
     public string? ContentType { get; set; }
     public string? S3Key { get; set; }
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 }

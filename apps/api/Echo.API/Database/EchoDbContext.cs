@@ -6,6 +6,7 @@ namespace Echo.API.Database;
 public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(options)
 {
     public DbSet<Recording> Recordings => Set<Recording>();
+    public DbSet<TranscriptionJob> TranscriptionJobs => Set<TranscriptionJob>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -40,6 +41,41 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
 
             entity.Property(recording => recording.CreatedAt)
                 .IsRequired();
+        });
+
+        modelBuilder.Entity<TranscriptionJob>(entity =>
+        {
+            entity.ToTable("transcription_jobs");
+
+            entity.Property(transcriptionJob => transcriptionJob.Id)
+                .ValueGeneratedOnAdd();
+
+            entity.Property(transcriptionJob => transcriptionJob.RecordingId)
+                .IsRequired();
+
+            entity.Property(transcriptionJob => transcriptionJob.RawText);
+
+            entity.Property(transcriptionJob => transcriptionJob.Status)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .IsRequired();
+
+            entity.Property(transcriptionJob => transcriptionJob.CreatedAt)
+                .IsRequired();
+
+            entity.Property(transcriptionJob => transcriptionJob.UpdatedAt);
+
+            entity.Property(transcriptionJob => transcriptionJob.RetryCount)
+                .IsRequired();
+
+            entity.Property(transcriptionJob => transcriptionJob.FailureReason)
+                .HasMaxLength(2048);
+
+            entity.HasOne(transcriptionJob => transcriptionJob.Recording)
+                .WithMany()
+                .HasForeignKey(transcriptionJob => transcriptionJob.RecordingId)
+                .IsRequired()
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

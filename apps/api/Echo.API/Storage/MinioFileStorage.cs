@@ -20,42 +20,7 @@ public class MinioFileStorage : IFileStorage
         _logger = logger;
     }
 
-    public string GetUrl(string fileKey)
-    {
-        throw new NotImplementedException();
-    }
-
-    public async Task<string> UploadAsync(string identifier, string fileName, Stream fileStream, string contentType,
-        CancellationToken cancellationToken)
-    {
-        var fileKey = GenerateFileKey(fileName, FileStorageContext.UserAvatar, identifier);
-        
-        var request = new PutObjectRequest
-        {
-            BucketName = _settings.BucketName,
-            Key = fileKey,
-            InputStream = fileStream,
-            ContentType = contentType,
-            AutoCloseStream = false
-        };
-
-        await _s3Client.PutObjectAsync(request, cancellationToken);
-
-        return fileKey;
-    }
-
-    public Task DownloadAsync(string fileKey, IFormFile file)
-    {
-        throw new NotImplementedException();
-    }
-
-
-    public Task DeleteAsync(string fileKey)
-    {
-        throw new NotImplementedException();
-    }
-    
-    private string GenerateFileKey(string fileName, FileStorageContext context, string? identifier)
+    public string CreateFileKey(string fileName, FileStorageContext context, string identifier)
     {
         var folder = context switch
         {
@@ -67,12 +32,49 @@ public class MinioFileStorage : IFileStorage
 
         var idSegment = !string.IsNullOrWhiteSpace(identifier) ? identifier : "global";
         var extension = Path.GetExtension(fileName).ToLowerInvariant();
-		
+	
         if (string.IsNullOrEmpty(extension))
             _logger.LogWarning("File '{FileName}' has no extension — key will be extensionless", fileName);
-		
+	
         var uniqueName = Guid.NewGuid().ToString("N");
 
         return $"{folder}/{idSegment}/{uniqueName}{extension.ToLowerInvariant()}";
+    }
+
+    public string GetUrl(string fileKey)
+    {
+        throw new NotImplementedException();
+    }
+
+    public async Task UploadAsync(string fileKey, Stream fileStream, string contentType,
+        CancellationToken cancellationToken)
+    {
+        var request = new PutObjectRequest
+        {
+            BucketName = _settings.BucketName,
+            Key = fileKey,
+            InputStream = fileStream,
+            ContentType = contentType,
+            AutoCloseStream = false
+        };
+
+        await _s3Client.PutObjectAsync(request, cancellationToken);
+    }
+
+    public Task DownloadAsync(string fileKey, IFormFile file)
+    {
+        throw new NotImplementedException();
+    }
+
+
+    public async Task DeleteAsync(string fileKey)
+    {
+        var request = new DeleteObjectRequest
+        {
+            BucketName = _settings.BucketName,
+            Key = fileKey
+        };
+
+        await _s3Client.DeleteObjectAsync(request);
     }
 }

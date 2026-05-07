@@ -6,14 +6,15 @@ using Echo.API.Storage;
 
 namespace Echo.API.Features.Recordings;
 
-public static class CreateRecording
+public class CreateRecording
 {
-    private const int MaxFileSize = 25 * 1024 * 1024;
+    private const int MaxFileSize = 25 * 1024 * 1024; // 25 MB
 
     public static async Task<IResult> Handle(
         IFormFile file, 
         IFileStorage fileStorage, 
         EchoDbContext dbContext,
+        ILogger<CreateRecording> logger,
         CancellationToken ct = default)
     {
         if (file.Length == 0)
@@ -28,10 +29,21 @@ public static class CreateRecording
         using var stream = file.OpenReadStream();
         if (!await AudioFileValidator.IsValidAudioFileAsync(stream, file.ContentType))
             return Results.BadRequest("File content does not match its declared type.");
+        
+        stream.Position = 0;
 
         var recordingId = Guid.CreateVersion7();
-        var fileKey = await fileStorage.UploadAsync(recordingId.ToString(), 
-            file.FileName, stream, file.ContentType, ct);
+        var fileKey = fileStorage.CreateFileKey(file.FileName, FileStorageContext.AudioRecording, recordingId.ToString());
+        
+        try
+        {
+            await fileStorage.UploadAsync(fileKey, stream, file.ContentType, ct);
+        }
+        catch (Exception uploadError)
+        {
+            logger.LogError(uploadError, "Failed to upload file {FileKey}", fileKey);
+            return Results.Problem("File storage is unavailable");
+        }
         
         var record = new Recording
         {
@@ -39,14 +51,38 @@ public static class CreateRecording
             FileName = file.FileName,
             ContentType = file.ContentType,
             S3Key = fileKey,    
-            CreatedAt = DateTime.UtcNow,
             Status = RecordingStatus.Pending
         };
         
         dbContext.Add(record);
-        await dbContext.SaveChangesAsync(ct);
         
-        // queue transcription job
+        var transcriptionJob = new TranscriptionJob
+        {
+            Id = Guid.CreateVersion7(),
+            RecordingId = recordingId,
+        };
+        
+        dbContext.Add(transcriptionJob);
+        
+        try
+        {
+            await dbContext.SaveChangesAsync(ct);
+        }
+        catch (Exception saveError)
+        {
+            logger.LogError(saveError, "Failed to save recording {RecordingId} after uploading file {FileKey}", recordingId, fileKey);
+
+            try
+            {
+                await fileStorage.DeleteAsync(fileKey);
+            }
+            catch (Exception cleanupError)
+            {
+                logger.LogError(cleanupError, "Failed to delete uploaded file {FileKey} after database save failure", fileKey);
+            }
+            
+            return Results.Problem("Failed to save recording.");
+        }
         
         return Results.Created($"/recording/{record.Id}", record);
     }
