@@ -1,15 +1,23 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"log"
+	"mime"
+	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/gustmrg/echo/apps/worker/internal/config"
 	"github.com/gustmrg/echo/apps/worker/internal/db"
 	"github.com/gustmrg/echo/apps/worker/internal/storage"
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 )
 
 func main() {
@@ -66,7 +74,6 @@ func main() {
 }
 
 func processJob(ctx context.Context, store *db.Store, storage *storage.S3Storage, job *db.TranscriptionJob) {
-	// TODO: download audio from S3, call Whisper API
 	recording, err := store.GetRecordingByID(ctx, job.RecordingID)
 	if err != nil {
 		failJob(ctx, store, job.ID, "error loading recording: "+err.Error())
@@ -94,7 +101,19 @@ func processJob(ctx context.Context, store *db.Store, storage *storage.S3Storage
 	}
 	log.Printf("downloaded %d bytes from %s for job %s", len(file), *recording.S3Key, job.ID)
 
-	if err := store.MarkJobCompleted(ctx, job.ID, ""); err != nil {
+	contentType := ""
+	if recording.ContentType != nil {
+		contentType = *recording.ContentType
+	}
+
+	transcript, err := TranscribeAudio(ctx, bytes.NewReader(file), recording.FileName, contentType)
+	if err != nil {
+		failJob(ctx, store, job.ID, "error transcribing file: "+err.Error())
+		log.Printf("error transcribing recording %s for job %s: %v", recording.ID, job.ID, err)
+		return
+	}
+
+	if err := store.MarkJobCompleted(ctx, job.ID, transcript); err != nil {
 		log.Printf("error marking job %s completed: %v", job.ID, err)
 		return
 	}
@@ -111,4 +130,51 @@ func failJob(ctx context.Context, store *db.Store, jobID string, reason string) 
 	if err := store.MarkJobFailed(ctx, jobID, reason); err != nil {
 		log.Printf("error marking job %s failed: %v", jobID, err)
 	}
+}
+
+type audioFile struct {
+	io.Reader
+	filename    string
+	contentType string
+}
+
+func (f audioFile) Filename() string {
+	return f.filename
+}
+
+func (f audioFile) ContentType() string {
+	return f.contentType
+}
+
+func TranscribeAudio(ctx context.Context, r io.Reader, filename, contentType string) (string, error) {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return "", fmt.Errorf("OPENAI_API_KEY is not set")
+	}
+
+	client := openai.NewClient(
+		option.WithAPIKey(apiKey),
+	)
+
+	if contentType == "" {
+		contentType = mime.TypeByExtension(filepath.Ext(filename))
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	resp, err := client.Audio.Transcriptions.New(ctx, openai.AudioTranscriptionNewParams{
+		File: audioFile{
+			Reader:      r,
+			filename:    filename,
+			contentType: contentType,
+		},
+		Model:          openai.AudioModelGPT4oTranscribe,
+		ResponseFormat: openai.AudioResponseFormatJSON,
+	})
+	if err != nil {
+		return "", fmt.Errorf("openai transcription failed: %w", err)
+	}
+
+	return resp.Text, nil
 }
