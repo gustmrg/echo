@@ -54,7 +54,9 @@ Fill in the required values in `.env`:
 ```dotenv
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=minioadmin
-OPENAI_API_KEY=your-openai-api-key
+TRANSCRIPTION_PROVIDER=openrouter
+OPENROUTER_API_KEY=your-openrouter-api-key
+OPENROUTER_TRANSCRIPTION_MODEL=openai/gpt-4o-mini-transcribe
 ```
 
 Start the local stack:

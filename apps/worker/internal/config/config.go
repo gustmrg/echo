@@ -7,8 +7,9 @@ import (
 )
 
 type Config struct {
-	DBPath  string
-	Storage StorageConfig
+	DBPath        string
+	Storage       StorageConfig
+	Transcription TranscriptionConfig
 }
 
 type StorageConfig struct {
@@ -18,6 +19,29 @@ type StorageConfig struct {
 	AccessKey      string
 	SecretKey      string
 	ForcePathStyle bool
+}
+
+type TranscriptionProvider string
+
+const (
+	TranscriptionProviderOpenRouter TranscriptionProvider = "openrouter"
+	TranscriptionProviderOpenAI     TranscriptionProvider = "openai"
+)
+
+type TranscriptionConfig struct {
+	Provider   TranscriptionProvider
+	OpenRouter OpenRouterConfig
+	OpenAI     OpenAIConfig
+}
+
+type OpenRouterConfig struct {
+	APIKey  string
+	BaseURL string
+	Model   string
+}
+
+type OpenAIConfig struct {
+	APIKey string
 }
 
 func Load() (*Config, error) {
@@ -31,9 +55,15 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	transcriptionConfig, err := loadTranscriptionConfig()
+	if err != nil {
+		return nil, err
+	}
+
 	return &Config{
-		DBPath:  dbPath,
-		Storage: storageConfig,
+		DBPath:        dbPath,
+		Storage:       storageConfig,
+		Transcription: transcriptionConfig,
 	}, nil
 }
 
@@ -70,5 +100,50 @@ func envFirst(names ...string) string {
 			return value
 		}
 	}
+
 	return ""
+}
+
+func loadTranscriptionConfig() (TranscriptionConfig, error) {
+	provider := TranscriptionProvider(envFirst("TRANSCRIPTION_PROVIDER", "Transcription__Provider"))
+	if provider == "" {
+		provider = TranscriptionProviderOpenRouter
+	}
+
+	openRouterBaseURL := envFirst("OPENROUTER_BASE_URL", "Transcription__OpenRouter__BaseUrl")
+	if openRouterBaseURL == "" {
+		openRouterBaseURL = "https://openrouter.ai/api/v1"
+	}
+
+	openRouterModel := envFirst("OPENROUTER_TRANSCRIPTION_MODEL", "Transcription__OpenRouter__Model")
+	if openRouterModel == "" {
+		openRouterModel = "openai/gpt-4o-mini-transcribe"
+	}
+
+	cfg := TranscriptionConfig{
+		Provider: provider,
+		OpenRouter: OpenRouterConfig{
+			APIKey:  envFirst("OPENROUTER_API_KEY", "Transcription__OpenRouter__ApiKey"),
+			BaseURL: openRouterBaseURL,
+			Model:   openRouterModel,
+		},
+		OpenAI: OpenAIConfig{
+			APIKey: envFirst("OPENAI_API_KEY", "Transcription__OpenAI__ApiKey"),
+		},
+	}
+
+	switch provider {
+	case TranscriptionProviderOpenRouter:
+		if cfg.OpenRouter.APIKey == "" {
+			return TranscriptionConfig{}, fmt.Errorf("OPENROUTER_API_KEY is required when TRANSCRIPTION_PROVIDER=openrouter")
+		}
+	case TranscriptionProviderOpenAI:
+		if cfg.OpenAI.APIKey == "" {
+			return TranscriptionConfig{}, fmt.Errorf("OPENAI_API_KEY is required when TRANSCRIPTION_PROVIDER=openai")
+		}
+	default:
+		return TranscriptionConfig{}, fmt.Errorf("TRANSCRIPTION_PROVIDER must be one of: openrouter, openai")
+	}
+
+	return cfg, nil
 }
