@@ -8,6 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.16
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.101.0
 	github.com/mattn/go-sqlite3 v1.14.44
+	github.com/openai/openai-go v1.12.0
 )
 
 require (
@@ -25,7 +26,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.21 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1 // indirect
 	github.com/aws/smithy-go v1.25.1 // indirect
-	github.com/openai/openai-go v1.12.0 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect

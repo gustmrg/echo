@@ -5,7 +5,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
 
-  postgres:
+  worker:
+    image: ${ECHO_WORKER_IMAGE:-gustmrg/echo-worker:latest}
     restart: unless-stopped
 
   minio:
