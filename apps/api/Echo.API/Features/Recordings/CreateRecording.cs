@@ -49,6 +49,7 @@ public class CreateRecording
         {
             Id = recordingId,
             FileName = file.FileName,
+            FileSizeBytes = file.Length,
             ContentType = file.ContentType,
             S3Key = fileKey,    
             Status = RecordingStatus.Pending
@@ -84,6 +85,6 @@ public class CreateRecording
             return Results.Problem("Failed to save recording.");
         }
         
-        return Results.Created($"/recording/{record.Id}", record);
+        return Results.Created($"/recording/{record.Id}", RecordingResponse.FromRecording(record));
     }
 }

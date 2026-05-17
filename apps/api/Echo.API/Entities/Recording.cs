@@ -13,7 +13,7 @@ public class Recording
     public string? Title { get; set; }
     public RecordingStatus Status { get; set; }
     public string FileName { get; set; }
-    public int FileSizeBytes { get; set; }
+    public long FileSizeBytes { get; set; }
     public string? ContentType { get; set; }
     public string? S3Key { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
