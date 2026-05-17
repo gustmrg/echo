@@ -11,7 +11,8 @@ public static class RecordingEndpoints
             .WithName("CreateRecording")
             .WithSummary("Create a recording")
             .WithDescription("Creates a new recording entry.")
-            .Produces(StatusCodes.Status201Created);
+            .Produces(StatusCodes.Status201Created)
+            .DisableAntiforgery();
 
         group.MapGet("/", () => { })
             .WithName("ListRecordings")
