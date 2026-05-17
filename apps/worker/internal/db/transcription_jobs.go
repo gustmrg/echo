@@ -3,10 +3,14 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 )
 
 func (s *Store) GetNextPendingJob(ctx context.Context) (*TranscriptionJob, error) {
 	var j TranscriptionJob
+	var createdAt string
+	var updatedAt sql.NullString
+
 	err := s.DB.QueryRowContext(ctx, `
 		UPDATE transcription_jobs
 		SET status = 'processing', updated_at = CURRENT_TIMESTAMP
@@ -18,13 +22,24 @@ func (s *Store) GetNextPendingJob(ctx context.Context) (*TranscriptionJob, error
 		)
 		RETURNING id, recording_id, raw_text, status, created_at, updated_at, retry_count, failure_reason
 	`).Scan(&j.ID, &j.RecordingID, &j.RawText, &j.Status,
-		&j.CreatedAt, &j.UpdatedAt, &j.RetryCount, &j.FailureReason)
+		&createdAt, &updatedAt, &j.RetryCount, &j.FailureReason)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+
+	j.CreatedAt, err = parseSQLiteTime(createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse transcription job created_at: %w", err)
+	}
+
+	j.UpdatedAt, err = parseNullableSQLiteTime(updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse transcription job updated_at: %w", err)
+	}
+
 	return &j, nil
 }
 

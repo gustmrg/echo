@@ -3,10 +3,14 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 )
 
 func (s *Store) GetRecordingByID(ctx context.Context, id string) (*Recording, error) {
 	var r Recording
+	var createdAt string
+	var updatedAt sql.NullString
+
 	err := s.DB.QueryRowContext(ctx, `
 		SELECT id, title, status, file_name, file_size_bytes, content_type, s3_key, created_at, updated_at
 		FROM recordings WHERE id = ?
@@ -18,8 +22,8 @@ func (s *Store) GetRecordingByID(ctx context.Context, id string) (*Recording, er
 		&r.FileSizeBytes,
 		&r.ContentType,
 		&r.S3Key,
-		&r.CreatedAt,
-		&r.UpdatedAt,
+		&createdAt,
+		&updatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -27,6 +31,17 @@ func (s *Store) GetRecordingByID(ctx context.Context, id string) (*Recording, er
 	if err != nil {
 		return nil, err
 	}
+
+	r.CreatedAt, err = parseSQLiteTime(createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse recording created_at: %w", err)
+	}
+
+	r.UpdatedAt, err = parseNullableSQLiteTime(updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse recording updated_at: %w", err)
+	}
+
 	return &r, nil
 }
 
