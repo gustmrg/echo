@@ -1,6 +1,5 @@
 using Echo.API.Entities;
 using Microsoft.EntityFrameworkCore;
-
 namespace Echo.API.Database;
 
 public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(options)
@@ -21,7 +20,9 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
                 .HasMaxLength(200);
 
             entity.Property(recording => recording.Status)
-                .HasConversion<string>()
+                .HasConversion(
+                    v => v.ToString().ToLowerInvariant(),
+                    v => Enum.Parse<Enums.RecordingStatus>(v, true))
                 .HasMaxLength(32)
                 .IsRequired();
 
@@ -37,6 +38,7 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
                 .HasMaxLength(100);
 
             entity.Property(recording => recording.S3Key)
+                .HasColumnName("s3_key")
                 .HasMaxLength(1024);
 
             entity.Property(recording => recording.CreatedAt)
@@ -56,7 +58,9 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
             entity.Property(transcriptionJob => transcriptionJob.RawText);
 
             entity.Property(transcriptionJob => transcriptionJob.Status)
-                .HasConversion<string>()
+                .HasConversion(
+                    v => v.ToString().ToLowerInvariant(),
+                    v => Enum.Parse<Enums.TranscriptionJobStatus>(v, true))
                 .HasMaxLength(32)
                 .IsRequired();
 

@@ -1,4 +1,3 @@
-using System.Security.Principal;
 using Echo.API.Enums;
 
 namespace Echo.API.Entities;

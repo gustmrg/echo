@@ -21,7 +21,7 @@ namespace Echo.API.Database.Migrations
                     file_name = table.Column<string>(type: "TEXT", maxLength: 255, nullable: false),
                     file_size_bytes = table.Column<int>(type: "INTEGER", nullable: false),
                     content_type = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
-                    s3key = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: true),
+                    s3_key = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: true),
                     created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
                     updated_at = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },

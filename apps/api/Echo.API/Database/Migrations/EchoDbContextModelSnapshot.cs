@@ -46,7 +46,7 @@ namespace Echo.API.Database.Migrations
                     b.Property<string>("S3Key")
                         .HasMaxLength(1024)
                         .HasColumnType("TEXT")
-                        .HasColumnName("s3key");
+                        .HasColumnName("s3_key");
 
                     b.Property<string>("Status")
                         .IsRequired()
