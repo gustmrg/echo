@@ -20,26 +20,41 @@ Echo is a text-to-speech workflow app that records audio, transcribes it to text
 
 ## Architecture
 
-Echo is organized as separate application layers inside the `apps` folder:
+Echo currently runs as a backend workflow made of an API service, a background
+worker, shared SQLite persistence, and S3-compatible object storage:
 
 ```text
-apps/
-  web/      React frontend built with Vite
-  api/      .NET API built with Minimal APIs
-  worker/   Go worker service for background processing
+apps/api/       .NET Minimal API for recording ingestion and metadata
+apps/worker/    Go worker for queued transcription jobs
+SQLite          shared database for recordings and transcription jobs
+MinIO/S3        object storage for uploaded audio files
 ```
-
-### `apps/web`
-
-The web app is the user-facing frontend. It will be built with React and Vite, and is responsible for recording or importing audio, presenting transcripts, collecting edits, and displaying generated outputs.
 
 ### `apps/api`
 
-The API is the backend application. It will be built with .NET Minimal APIs and is responsible for exposing HTTP endpoints, coordinating persistence, authentication, workflow state, and communication between the frontend and background processing.
+The API is a .NET Minimal API application. It exposes recording endpoints for
+uploading, listing, retrieving, and deleting recordings. Uploaded audio is
+validated, stored in S3-compatible storage, and recorded in SQLite through
+Entity Framework Core. Creating a recording also creates a pending
+transcription job for the worker to process.
+
+In development, the API also exposes OpenAPI and Scalar API reference pages.
 
 ### `apps/worker`
 
-The worker service handles long-running or asynchronous jobs. It will be built with Go and is responsible for background processing such as audio transcription, AI refinement jobs, and other queued workflow tasks.
+The worker is a Go service that polls SQLite for pending transcription jobs. For
+each job, it loads the recording metadata, downloads the audio file from
+S3-compatible storage, sends it to the configured transcription provider, stores
+the raw transcript, and updates the recording status.
+
+The worker supports OpenRouter by default and can also use OpenAI directly.
+
+### Persistence and storage
+
+The API and worker share the same SQLite database. In Docker Compose, the
+database lives in the `appdata` volume at `/data/echo.db`. Audio files are stored
+outside the database in the `echo-files` bucket. The local Compose stack uses
+MinIO and creates the bucket automatically with the `minio-init` service.
 
 ## Run with Docker Compose
 
@@ -86,4 +101,4 @@ Use `docker compose down -v` only when you want to remove the SQLite and MinIO D
 
 ## License
 
-MIT - see `LICENSE`.
+MIT - see [LICENSE](LICENSE).
