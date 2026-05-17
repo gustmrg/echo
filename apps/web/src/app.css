@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0C0C0E;
+  --color-surface: #161619;
+  --color-surface-raised: #1E1E22;
+  --color-surface-hover: #26262B;
+  --color-border: #2A2A30;
+  --color-text-primary: #F0EDE8;
+  --color-text-secondary: #8E8C87;
+  --color-text-tertiary: #5C5A56;
+  --color-accent: #E8573A;
+  --color-accent-glow: rgba(232, 87, 58, 0.15);
+  --color-accent-soft: #D4A574;
+  --color-success: #5CB87A;
+  --color-warning: #D4A03C;
+
+  --font-display: 'DM Serif Display', serif;
+  --font-body: 'Manrope', sans-serif;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --animate-orb-breathe: orb-breathe 2s ease-in-out infinite;
+  --animate-ring-expand: ring-expand 2s ease-in-out infinite;
+  --animate-pulse-dot: pulse-dot 1.5s ease infinite;
+}
+
+@keyframes orb-breathe {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 60px rgba(232, 87, 58, 0.15); }
+  50% { transform: scale(1.06); box-shadow: 0 0 80px rgba(232, 87, 58, 0.25); }
+}
+
+@keyframes ring-expand {
+  0%, 100% { inset: -16px; opacity: 1; }
+  50% { inset: -24px; opacity: 0.5; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
