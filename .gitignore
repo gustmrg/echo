@@ -480,3 +480,6 @@ $RECYCLE.BIN/
 # Environment variables files
 .env
 .env.local
+
+# Vite build directory
+dist/
