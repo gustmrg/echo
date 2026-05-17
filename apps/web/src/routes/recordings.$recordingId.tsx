@@ -34,7 +34,7 @@ export default function ReviewPage() {
   })
 
   return (
-    <div className="flex flex-col h-full bg-bg">
+    <div className="flex flex-col h-full bg-bg animate-fade-in-up">
       {/* Header */}
       <div className="flex justify-between items-center px-6 py-3.5 flex-shrink-0">
         <button

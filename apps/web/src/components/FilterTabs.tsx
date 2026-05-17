@@ -20,7 +20,7 @@ export default function FilterTabs({ active, onChange }: FilterTabsProps) {
         <button
           key={id}
           onClick={() => onChange(id)}
-          className={`px-4 py-[7px] rounded-full text-[13px] font-medium border whitespace-nowrap transition-colors ${
+          className={`px-4 py-[7px] rounded-full text-[13px] font-medium border whitespace-nowrap transition-all active:scale-[0.96] touch-manipulation ${
             active === id
               ? 'bg-text-primary text-bg border-text-primary'
               : 'border-border text-text-secondary bg-transparent'

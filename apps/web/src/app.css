@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+  }
+
+  html {
+    overscroll-behavior: none;
+  }
+
+  body {
+    background: var(--color-bg);
+  }
+}
+
 @theme {
   --color-bg: #0C0C0E;
   --color-surface: #161619;

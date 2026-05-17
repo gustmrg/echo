@@ -75,7 +75,7 @@ export default function HomePage() {
   const isEmpty = !isLoading && !isError && groups.length === 0
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full animate-fade-in-up">
       {/* Header */}
       <div className="px-6 pt-4 pb-4 flex-shrink-0">
         <div className="flex justify-between items-center mb-1">

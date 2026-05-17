@@ -59,7 +59,7 @@ export default function RecordPage() {
     : 'Paused — tap to resume'
 
   return (
-    <div className="flex flex-col h-full bg-bg">
+    <div className="flex flex-col h-full bg-bg animate-fade-in-up">
       {/* Header */}
       <div className="flex justify-between items-center px-6 py-3.5 flex-shrink-0">
         <button
@@ -125,7 +125,7 @@ export default function RecordPage() {
           onClick={handleDiscard}
           aria-label="Discard recording"
           style={{ visibility: isActive ? 'visible' : 'hidden' }}
-          className="w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center text-text-secondary active:bg-surface-hover transition-colors"
+          className="w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center text-text-secondary active:bg-surface-hover active:scale-90 transition-all touch-manipulation"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -138,7 +138,7 @@ export default function RecordPage() {
           onClick={handlePrimaryBtn}
           disabled={isUploading}
           aria-label={isRecording ? 'Pause recording' : state === 'paused' ? 'Resume recording' : 'Start recording'}
-          className={`w-20 h-20 rounded-full border-2 flex items-center justify-center active:scale-90 transition-all duration-[250ms] ease-[var(--ease-spring)] disabled:opacity-50 ${
+          className={`w-20 h-20 rounded-full border-2 flex items-center justify-center active:scale-90 transition-all duration-[250ms] ease-[var(--ease-spring)] disabled:opacity-50 touch-manipulation ${
             isRecording
               ? 'border-accent bg-transparent'
               : 'border-accent bg-accent shadow-[0_4px_32px_rgba(232,87,58,0.4)]'
@@ -162,7 +162,7 @@ export default function RecordPage() {
           disabled={isUploading}
           aria-label="Finish and upload"
           style={{ visibility: isActive ? 'visible' : 'hidden' }}
-          className="w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center text-text-secondary active:bg-surface-hover transition-colors disabled:opacity-50"
+          className="w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center text-text-secondary active:bg-surface-hover active:scale-90 transition-all touch-manipulation disabled:opacity-50"
         >
           {isUploading ? (
             <div className="w-4 h-4 border-2 border-text-tertiary border-t-text-primary rounded-full animate-spin" />
