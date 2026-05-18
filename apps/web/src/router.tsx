@@ -3,6 +3,7 @@ import Layout from './components/Layout'
 import HomePage from './routes/index'
 import RecordPage from './routes/record'
 import ReviewPage from './routes/recordings.$recordingId'
+import SettingsPage from './routes/settings'
 
 const rootRoute = createRootRoute({
   component: Layout,
@@ -26,7 +27,13 @@ const reviewRoute = createRoute({
   component: ReviewPage,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, recordRoute, reviewRoute])
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings',
+  component: SettingsPage,
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, recordRoute, reviewRoute, settingsRoute])
 
 export const router = createRouter({ routeTree })
 

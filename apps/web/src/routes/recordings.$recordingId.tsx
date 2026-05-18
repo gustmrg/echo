@@ -178,7 +178,7 @@ export default function ReviewPage() {
           </div>
 
           {/* Action buttons */}
-          <div className="flex-shrink-0 flex gap-2.5 px-6 pb-9 pt-6 bg-gradient-to-t from-bg to-transparent">
+          <div className="flex-shrink-0 flex gap-2.5 px-6 pb-4 pt-6 bg-gradient-to-t from-bg to-transparent">
             <button
               disabled
               className="flex-1 py-4 rounded-md text-[15px] font-semibold bg-surface border border-border text-text-primary opacity-50 cursor-not-allowed active:scale-[0.97] transition-transform"

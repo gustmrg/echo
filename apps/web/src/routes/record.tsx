@@ -119,7 +119,7 @@ export default function RecordPage() {
       </div>
 
       {/* Controls */}
-      <div className="flex justify-center items-center gap-10 px-6 pt-8 pb-12 flex-shrink-0">
+      <div className="flex justify-center items-center gap-10 px-6 pt-8 pb-4 flex-shrink-0">
         {/* Discard */}
         <button
           onClick={handleDiscard}

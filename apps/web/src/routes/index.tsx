@@ -93,7 +93,7 @@ export default function HomePage() {
       <FilterTabs active={filter} onChange={setFilter} />
 
       {/* Scrollable list */}
-      <div className="flex-1 overflow-y-auto px-6 pb-28">
+      <div className="flex-1 overflow-y-auto px-6 pb-4">
         {isLoading && (
           <div className="space-y-2.5">
             {[1, 2, 3].map(i => (
