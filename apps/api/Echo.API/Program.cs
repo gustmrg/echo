@@ -21,6 +21,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapRecordings();
+var api = app.MapGroup("api");
+api.MapRecordings();
 
 app.Run();

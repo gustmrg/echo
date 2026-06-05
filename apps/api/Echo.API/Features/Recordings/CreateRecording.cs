@@ -23,11 +23,13 @@ public class CreateRecording
         if (file.Length > MaxFileSize)
             return Results.BadRequest("File exceeds 25MB limit.");
         
-        if (!AudioFileValidator.IsSupportedContentType(file.ContentType))
+        var contentType = AudioFileValidator.NormalizeContentType(file.ContentType);
+        
+        if (!AudioFileValidator.IsSupportedContentType(contentType))
             return Results.BadRequest("Unsupported audio format.");
         
         using var stream = file.OpenReadStream();
-        if (!await AudioFileValidator.IsValidAudioFileAsync(stream, file.ContentType))
+        if (!await AudioFileValidator.IsValidAudioFileAsync(stream, contentType))
             return Results.BadRequest("File content does not match its declared type.");
         
         stream.Position = 0;
@@ -37,7 +39,7 @@ public class CreateRecording
         
         try
         {
-            await fileStorage.UploadAsync(fileKey, stream, file.ContentType, ct);
+            await fileStorage.UploadAsync(fileKey, stream, contentType, ct);
         }
         catch (Exception uploadError)
         {
@@ -50,7 +52,7 @@ public class CreateRecording
             Id = recordingId,
             FileName = file.FileName,
             FileSizeBytes = file.Length,
-            ContentType = file.ContentType,
+            ContentType = contentType,
             S3Key = fileKey,    
             Status = RecordingStatus.Pending
         };

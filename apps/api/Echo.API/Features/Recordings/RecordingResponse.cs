@@ -1,4 +1,3 @@
-using System.Globalization;
 using Echo.API.Entities;
 
 namespace Echo.API.Features.Recordings;
@@ -8,15 +7,12 @@ internal sealed record RecordingResponse(
     string? Title,
     string Status,
     string FileName,
-    string FileSizeBytes,
-    string FileSizeMegabytes,
+    long FileSizeBytes,
     string? ContentType,
-    string? S3Key,
+    string? TranscribedText,
     DateTime CreatedAt,
     DateTime? UpdatedAt)
 {
-    private const decimal BytesPerMegabyte = 1024m * 1024m;
-
     public static RecordingResponse FromRecording(Recording recording)
     {
         return new RecordingResponse(
@@ -24,17 +20,10 @@ internal sealed record RecordingResponse(
             recording.Title,
             recording.Status.ToString().ToLowerInvariant(),
             recording.FileName,
-            recording.FileSizeBytes.ToString(CultureInfo.InvariantCulture),
-            FormatFileSizeMegabytes(recording.FileSizeBytes),
+            recording.FileSizeBytes,
             recording.ContentType,
-            recording.S3Key,
+            recording.TranscribedText,
             recording.CreatedAt,
             recording.UpdatedAt);
-    }
-
-    private static string FormatFileSizeMegabytes(long fileSizeBytes)
-    {
-        var megabytes = fileSizeBytes / BytesPerMegabyte;
-        return $"{megabytes.ToString("0.##", CultureInfo.InvariantCulture)} MB";
     }
 }

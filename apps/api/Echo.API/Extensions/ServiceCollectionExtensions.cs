@@ -23,14 +23,16 @@ public static class ServiceCollectionExtensions
             var s3Options = sp.GetRequiredService<IOptions<S3Options>>().Value;
             var config = new AmazonS3Config
             {
-                // MinIO and similar S3-compatible providers typically require path-style bucket addressing.
                 ForcePathStyle = s3Options.ForcePathStyle,
+                RequestChecksumCalculation = RequestChecksumCalculation.WHEN_REQUIRED,
+                ResponseChecksumValidation = ResponseChecksumValidation.WHEN_REQUIRED,
             };
 
             if (!string.IsNullOrWhiteSpace(s3Options.ServiceUrl))
             {
                 // ServiceUrl is only needed for custom S3-compatible endpoints such as local MinIO.
                 config.ServiceURL = s3Options.ServiceUrl;
+                config.AuthenticationRegion = s3Options.Region;
             }
             else
             {

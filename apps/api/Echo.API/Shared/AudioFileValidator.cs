@@ -61,7 +61,7 @@ public static class AudioFileValidator
     private static bool HasPrefix(ReadOnlySpan<byte> buffer, int bytesRead, ReadOnlySpan<byte> signature) =>
         bytesRead >= signature.Length && buffer[..signature.Length].SequenceEqual(signature);
 
-    private static string NormalizeContentType(string contentType)
+    public static string NormalizeContentType(string contentType)
     {
         var separatorIndex = contentType.IndexOf(';');
         return separatorIndex >= 0 ? contentType[..separatorIndex].Trim() : contentType.Trim();

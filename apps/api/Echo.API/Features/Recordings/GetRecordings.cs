@@ -14,7 +14,7 @@ public class GetRecordings
             .AsNoTracking()
             .ToListAsync(ct);
 
-        var recordings = recordingEntities.Select(RecordingResponse.FromRecording);
+        var recordings = recordingEntities.Select(r => RecordingResponse.FromRecording(r));
 
         return Results.Ok(recordings);
     }

@@ -1,4 +1,5 @@
 using Echo.API.Entities;
+using Echo.API.Enums;
 using Microsoft.EntityFrameworkCore;
 namespace Echo.API.Database;
 
@@ -13,8 +14,10 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
         {
             entity.ToTable("recordings");
 
+            entity.HasKey(recording => recording.Id);
+
             entity.Property(recording => recording.Id)
-                .ValueGeneratedOnAdd();
+                .ValueGeneratedNever();
 
             entity.Property(recording => recording.Title)
                 .HasMaxLength(200);
@@ -22,7 +25,7 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
             entity.Property(recording => recording.Status)
                 .HasConversion(
                     v => v.ToString().ToLowerInvariant(),
-                    v => Enum.Parse<Enums.RecordingStatus>(v, true))
+                    v => Enum.Parse<RecordingStatus>(v, true))
                 .HasMaxLength(32)
                 .IsRequired();
 
@@ -41,26 +44,33 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
                 .HasColumnName("s3_key")
                 .HasMaxLength(1024);
 
+            entity.Property(recording => recording.TranscribedText);
+
             entity.Property(recording => recording.CreatedAt)
                 .IsRequired();
+
+            entity.Property(recording => recording.UpdatedAt);
         });
 
         modelBuilder.Entity<TranscriptionJob>(entity =>
         {
             entity.ToTable("transcription_jobs");
 
+            entity.HasKey(transcriptionJob => transcriptionJob.Id);
+
             entity.Property(transcriptionJob => transcriptionJob.Id)
-                .ValueGeneratedOnAdd();
+                .ValueGeneratedNever();
 
             entity.Property(transcriptionJob => transcriptionJob.RecordingId)
-                .IsRequired();
+                .ValueGeneratedNever();
 
-            entity.Property(transcriptionJob => transcriptionJob.RawText);
+            entity.HasIndex(transcriptionJob => transcriptionJob.RecordingId)
+                .IsUnique();
 
             entity.Property(transcriptionJob => transcriptionJob.Status)
                 .HasConversion(
                     v => v.ToString().ToLowerInvariant(),
-                    v => Enum.Parse<Enums.TranscriptionJobStatus>(v, true))
+                    v => Enum.Parse<JobStatus>(v, true))
                 .HasMaxLength(32)
                 .IsRequired();
 
@@ -76,8 +86,8 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
                 .HasMaxLength(2048);
 
             entity.HasOne(transcriptionJob => transcriptionJob.Recording)
-                .WithMany()
-                .HasForeignKey(transcriptionJob => transcriptionJob.RecordingId)
+                .WithOne(recording => recording.TranscriptionJob)
+                .HasForeignKey<TranscriptionJob>(transcriptionJob => transcriptionJob.RecordingId)
                 .IsRequired()
                 .OnDelete(DeleteBehavior.Cascade);
         });

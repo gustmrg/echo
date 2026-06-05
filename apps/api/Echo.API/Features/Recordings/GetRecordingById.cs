@@ -13,6 +13,7 @@ public class GetRecordingById
     {
         var recording = await dbContext.Recordings
             .AsNoTracking()
+            .Include(r => r.TranscriptionJob)
             .FirstOrDefaultAsync(recording => recording.Id == id, ct);
 
         if (recording is null)

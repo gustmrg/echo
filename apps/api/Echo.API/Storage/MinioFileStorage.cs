@@ -55,7 +55,8 @@ public class MinioFileStorage : IFileStorage
             Key = fileKey,
             InputStream = fileStream,
             ContentType = contentType,
-            AutoCloseStream = false
+            AutoCloseStream = false,
+            UseChunkEncoding = false
         };
 
         await _s3Client.PutObjectAsync(request, cancellationToken);
