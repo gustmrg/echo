@@ -1,6 +1,7 @@
 using Echo.API.Database;
 using Echo.API.Entities;
 using Echo.API.Enums;
+using Echo.API.Messaging;
 using Echo.API.Shared;
 using Echo.API.Storage;
 
@@ -15,6 +16,7 @@ public class CreateRecording
         IFileStorage fileStorage, 
         EchoDbContext dbContext,
         ILogger<CreateRecording> logger,
+        IMessagePublisher publisher,
         CancellationToken ct = default)
     {
         if (file.Length == 0)
@@ -86,7 +88,17 @@ public class CreateRecording
             
             return Results.Problem("Failed to save recording.");
         }
+
+        var message = new TranscriptionRequestedMessage(recordingId, fileKey);
+        
+        await publisher.PublishAsync(
+            exchange: Exchanges.Events, 
+            Queues.RecordingWorker, 
+            RoutingKeys.Recording.TranscriptionRequested, 
+            message, ct);
         
         return Results.Created($"/recording/{record.Id}", RecordingResponse.FromRecording(record));
     }
 }
+
+public record TranscriptionRequestedMessage(Guid RecordingId, string FileKey);

@@ -2,9 +2,11 @@ using Amazon;
 using Amazon.Runtime;
 using Amazon.S3;
 using Echo.API.Database;
+using Echo.API.Messaging;
 using Echo.API.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using RabbitMQ.Client;
 
 namespace Echo.API.Extensions;
 
@@ -51,6 +53,33 @@ public static class ServiceCollectionExtensions
         
         services.AddSingleton<IFileStorage, MinioFileStorage>();
 
+        #region Configure RabbitMQ
+
+        services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
+
+        services.AddSingleton<IConnectionFactory>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<RabbitMqOptions>>().Value;
+            
+            return new ConnectionFactory
+            {
+                HostName = options.HostName,
+                Port = options.Port,
+                UserName = options.UserName,
+                Password = options.Password,
+                VirtualHost = options.VirtualHost,
+                AutomaticRecoveryEnabled = true,
+                TopologyRecoveryEnabled = true,
+            };
+        });
+
+        services.AddSingleton<RabbitMqConnection>();
+        services.AddScoped<IMessagePublisher, RabbitMqPublisher>();
+         
+        #endregion
+        
         return services;
     }
+    
+    
 }
