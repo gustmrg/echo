@@ -20,6 +20,8 @@ Echo is a text-to-speech workflow app that records audio, transcribes it to text
 
 ## Architecture
 
+![Echo system architecture](docs/architecture.png)
+
 Echo currently runs as a backend workflow made of an API service, a background
 worker, shared SQLite persistence, S3-compatible object storage, and a
 RabbitMQ broker:
@@ -31,36 +33,6 @@ SQLite          shared database for recordings and transcription jobs
 MinIO/S3        object storage for uploaded audio files
 RabbitMQ        message broker for asynchronous workflows
 ```
-
-### `apps/api`
-
-The API is a .NET Minimal API application. It exposes recording endpoints for
-uploading, listing, retrieving, and deleting recordings. Uploaded audio is
-validated, stored in S3-compatible storage, and recorded in SQLite through
-Entity Framework Core. Creating a recording also creates a pending
-transcription job for the worker to process.
-
-In development, the API also exposes OpenAPI and Scalar API reference pages.
-
-### `apps/worker`
-
-The worker is a Go service that polls SQLite for pending transcription jobs. For
-each job, it loads the recording metadata, downloads the audio file from
-S3-compatible storage, sends it to the configured transcription provider, stores
-the raw transcript, and updates the recording status.
-
-The worker supports OpenRouter by default and can also use OpenAI directly.
-
-### Persistence and storage
-
-The API and worker share the same SQLite database. In Docker Compose, the
-database lives in the `appdata` volume at `/data/echo.db`. Audio files are stored
-outside the database in the `echo-files` bucket. The local Compose stack uses
-MinIO and creates the bucket automatically with the `minio-init` service.
-
-RabbitMQ is also available in Docker Compose for broker-backed asynchronous
-workflows. It uses the `rabbitmq:4-management` image, exposes AMQP on port
-`5672`, and exposes the management UI on `http://localhost:15672`.
 
 ## Run with Docker Compose
 
