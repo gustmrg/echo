@@ -23,13 +23,13 @@ Echo is a text-to-speech workflow app that records audio, transcribes it to text
 ![Echo system architecture](docs/architecture.png)
 
 Echo currently runs as a backend workflow made of an API service, a background
-worker, shared SQLite persistence, S3-compatible object storage, and a
+worker, API-managed SQLite persistence, S3-compatible object storage, and a
 RabbitMQ broker:
 
 ```text
 apps/api/       .NET Minimal API for recording ingestion and metadata
 apps/worker/    Go worker for queued transcription jobs
-SQLite          shared database for recordings and transcription jobs
+SQLite          API database for recordings and transcription jobs
 MinIO/S3        object storage for uploaded audio files
 RabbitMQ        message broker for asynchronous workflows
 ```
@@ -67,7 +67,7 @@ The Compose stack starts:
 - `rabbitmq`: RabbitMQ broker on `localhost:5672`
 - `rabbitmq` management UI: `http://localhost:15672`
 
-The API and worker share a SQLite database through the `appdata` Docker volume. Uploaded audio files are stored in MinIO in the `echo-files` bucket, which is created automatically by the `minio-init` service.
+The API stores SQLite data through the `appdata` Docker volume. Uploaded audio files are stored in MinIO in the `echo-files` bucket, which is created automatically by the `minio-init` service.
 
 RabbitMQ uses the default local credentials `echo` / `echo` in Compose.
 

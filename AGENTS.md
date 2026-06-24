@@ -23,20 +23,18 @@ Each feature lives under `Features/<FeatureName>/` with its own endpoint registr
 
 ## Back-End Patterns (Worker — Go)
 
-### Poll-Based Job Processing
-- The worker runs a continuous loop that polls SQLite for pending `TranscriptionJob` rows.
+### Worker Runtime
+- The worker does not connect to SQLite directly.
 - Graceful shutdown via `signal.NotifyContext` (SIGINT/SIGTERM).
-- On each iteration: fetch next pending job → download audio from S3 → transcribe → update job and recording status.
 
 ### Internal Package Layout
 - `internal/config` — loads environment variables into a typed config struct.
-- `internal/db` — raw SQL queries via `database/sql` (no ORM); a `Store` type wraps the connection.
 - `internal/storage` — S3 client for downloading audio files.
 - `internal/transcription` — `Transcriber` interface with provider implementations (OpenRouter, OpenAI).
 
 ### Shared Infrastructure
-- Both API and worker share the same SQLite database file and MinIO/S3 bucket.
-- Docker Compose mounts a shared `appdata` volume for the database.
+- The API owns SQLite access; the worker uses MinIO/S3 and asynchronous infrastructure only.
+- Docker Compose mounts the `appdata` volume for the API database.
 
 ## Commits
 
