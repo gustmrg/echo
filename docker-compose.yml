@@ -35,20 +35,7 @@ services:
       TRANSCRIPTION_ROUTING_KEY: "recording.transcription.requested"
       RABBITMQ_PREFETCH: "1"
       RABBITMQ_REQUEUE_ON_FAILURE: "false"
-      S3_BUCKET: "echo-files"
-      S3_REGION: "us-east-1"
-      S3_ENDPOINT: "http://minio:9000"
-      S3_ACCESS_KEY: "${MINIO_ROOT_USER}"
-      S3_SECRET_KEY: "${MINIO_ROOT_PASSWORD}"
-      S3_FORCE_PATH_STYLE: "true"
-      TRANSCRIPTION_PROVIDER: "${TRANSCRIPTION_PROVIDER:-openrouter}"
-      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
-      OPENROUTER_BASE_URL: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
-      OPENROUTER_TRANSCRIPTION_MODEL: "${OPENROUTER_TRANSCRIPTION_MODEL:-openai/gpt-4o-mini-transcribe}"
-      OPENAI_API_KEY: "${OPENAI_API_KEY}"
     depends_on:
-      minio-init:
-        condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
     networks:

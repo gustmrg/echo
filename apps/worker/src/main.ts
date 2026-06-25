@@ -1,17 +1,18 @@
-async function start(): Promise<void> {
-  console.log("[worker] Worker is running.");
+import "dotenv/config";
+import { loadRabbitMqConfig } from "./config/index.js";
+import { startRabbitMqConsumer } from "./messaging/consumer.js";
+
+async function main(): Promise<void> {
+  console.log("[worker] Starting...");
+
+  const rabbitMqConfig = loadRabbitMqConfig();
+  await startRabbitMqConsumer(rabbitMqConfig);
+
+  // register consumers
+  // wait for shutdown signal
 }
 
-async function shutdown(signal: string): Promise<void> {
-  console.log(`[worker] Received ${signal}. Shutting down...`);
-
-  process.exit(0);
-}
-
-process.on("SIGINT", () => void shutdown("SIGINT"));
-process.on("SIGTERM", () => void shutdown("SIGTERM"));
-
-start().catch((error) => {
+main().catch((error) => {
   console.error("[worker] Fatal startup error:", error);
   process.exit(1);
 });
