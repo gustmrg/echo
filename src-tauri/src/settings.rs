@@ -385,6 +385,10 @@ pub struct AppSettings {
     pub clamshell_microphone: Option<String>,
     #[serde(default)]
     pub selected_output_device: Option<String>,
+    /// Stable CPAL device ID used as the render endpoint for meeting loopback.
+    /// None follows the operating system's current default output device.
+    #[serde(default)]
+    pub meeting_output_device_id: Option<String>,
     #[serde(default = "default_translate_to_english")]
     pub translate_to_english: bool,
     #[serde(default = "default_selected_language")]
@@ -870,6 +874,7 @@ pub fn get_default_settings() -> AppSettings {
         selected_channel: None,
         clamshell_microphone: None,
         selected_output_device: None,
+        meeting_output_device_id: None,
         translate_to_english: false,
         selected_language: "auto".to_string(),
         overlay_position: default_overlay_position(),

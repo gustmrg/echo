@@ -4,6 +4,7 @@ use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, S
 use crate::audio_toolkit::{is_microphone_access_denied, is_no_input_device_error, VadPolicy};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
+use crate::managers::meeting::MeetingManager;
 use crate::managers::model::ModelManager;
 use crate::managers::transcription::StreamWorkKind;
 use crate::managers::transcription::TranscriptionManager;
@@ -469,6 +470,20 @@ impl ShortcutAction for TranscribeAction {
     fn start(&self, app: &AppHandle, binding_id: &str, _shortcut_str: &str) {
         let start_time = Instant::now();
         debug!("TranscribeAction::start called for binding: {}", binding_id);
+
+        if app
+            .try_state::<Arc<MeetingManager>>()
+            .is_some_and(|manager| manager.is_busy())
+        {
+            let _ = app.emit(
+                "recording-error",
+                RecordingErrorEvent {
+                    error_type: "meeting_busy".to_string(),
+                    detail: Some("A meeting is currently recording or transcribing".to_string()),
+                },
+            );
+            return;
+        }
 
         // Load model in the background
         let tm = app.state::<Arc<TranscriptionManager>>();

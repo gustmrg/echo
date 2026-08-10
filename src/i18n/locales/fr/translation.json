@@ -16,7 +16,8 @@
     "postProcessing": "Post-traitement",
     "history": "Historique",
     "debug": "Débogage",
-    "about": "À propos"
+    "about": "À propos",
+    "meetings": "Meetings"
   },
   "onboarding": {
     "subtitle": "Pour commencer, choisissez un modèle de transcription",
@@ -683,5 +684,85 @@
     "learnMore": "Comment résoudre ce problème",
     "recorderBlocked": "Impossible d'enregistrer un raccourci pour le moment : Secure Input de macOS bloque les événements clavier. Résolvez d'abord l'avertissement Secure Input.",
     "dismiss": "Ignorer"
+  },
+  "meetings": {
+    "title": "Meeting recorder",
+    "subtitle": "Capture your microphone and the people you hear",
+    "status": {
+      "ready": "Ready",
+      "recording": "Recording",
+      "transcribing": "Transcribing",
+      "completed": "Completed",
+      "failed": "Needs attention",
+      "interrupted": "Interrupted"
+    },
+    "sources": {
+      "you": "You",
+      "meeting": "Meeting",
+      "microphone": "Microphone",
+      "system": "System audio"
+    },
+    "output": {
+      "label": "Meeting audio output",
+      "default": "System default {{device}}"
+    },
+    "headphones": "Headphones give the cleanest source labels. Speaker echo is removed on a best-effort basis.",
+    "actions": {
+      "start": "Start meeting",
+      "stop": "Stop & transcribe",
+      "cancel": "Cancel",
+      "close": "Not now",
+      "keep": "Keep recording",
+      "discard": "Discard recording",
+      "copy": "Copy transcript",
+      "retry": "Retry transcription",
+      "delete": "Delete meeting",
+      "rename": "Rename meeting",
+      "save": "Save title",
+      "keepMeeting": "Keep meeting",
+      "confirmDelete": "Delete permanently"
+    },
+    "previous": {
+      "title": "Previous meetings",
+      "empty": "Your completed meetings will appear here.",
+      "untitled": "Untitled meeting"
+    },
+    "audio": {
+      "play": "Play meeting audio",
+      "pause": "Pause meeting audio",
+      "timeline": "Meeting audio timeline"
+    },
+    "transcript": {
+      "empty": "No speech was detected in this meeting."
+    },
+    "consent": {
+      "title": "Before you record",
+      "description": "Meeting recordings can contain private conversations.",
+      "body": "Make sure everyone has agreed to be recorded and follow the rules that apply where you are.",
+      "accept": "I have permission"
+    },
+    "cancel": {
+      "title": "Discard this recording?",
+      "description": "The captured audio cannot be recovered after it is discarded.",
+      "body": "Both your microphone track and the meeting audio track will be permanently deleted."
+    },
+    "delete": {
+      "title": "Delete this meeting?",
+      "description": "Its transcript and both audio tracks will be permanently deleted.",
+      "body": "This cannot be undone."
+    },
+    "unsupported": {
+      "title": "Meeting capture is unavailable",
+      "meeting_requires_macos_14_7": "Meeting capture requires macOS 14.7 or newer.",
+      "meeting_unsupported_platform": "Meeting capture currently supports macOS and Windows."
+    },
+    "toast": {
+      "started": "Meeting recording started",
+      "transcribing": "Recording saved. Transcription started.",
+      "discarded": "Meeting recording discarded",
+      "retrying": "Transcription restarted",
+      "copied": "Transcript copied",
+      "renamed": "Meeting renamed"
+    }
   }
 }

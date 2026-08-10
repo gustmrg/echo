@@ -33,6 +33,7 @@ use tauri_specta::{collect_commands, collect_events, Builder};
 use env_filter::Builder as EnvFilterBuilder;
 use managers::audio::AudioRecordingManager;
 use managers::history::HistoryManager;
+use managers::meeting::MeetingManager;
 use managers::model::ModelManager;
 use managers::transcription::TranscriptionManager;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
@@ -167,6 +168,10 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     );
     let history_manager =
         Arc::new(HistoryManager::new(app_handle).expect("Failed to initialize history manager"));
+    let meeting_manager = Arc::new(
+        MeetingManager::new(app_handle, transcription_manager.clone())
+            .expect("Failed to initialize meeting manager"),
+    );
 
     // Initialize the transcribe-cpp native backend (logging + backend module
     // registration) once, before any whisper model is loaded.
@@ -180,6 +185,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(model_manager.clone());
     app_handle.manage(transcription_manager.clone());
     app_handle.manage(history_manager.clone());
+    app_handle.manage(meeting_manager.clone());
     app_handle.manage(tray::CurrentTrayIconState::new());
 
     // Note: Shortcuts are NOT initialized here.
@@ -714,12 +720,27 @@ pub fn run(cli_args: CliArgs) {
             commands::history::retry_history_entry_transcription,
             commands::history::update_history_limit,
             commands::history::update_recording_retention_period,
+            commands::meeting::get_meeting_capabilities,
+            commands::meeting::get_meeting_capture_devices,
+            commands::meeting::set_meeting_output_device,
+            commands::meeting::get_meeting_output_device,
+            commands::meeting::start_meeting,
+            commands::meeting::stop_meeting,
+            commands::meeting::cancel_meeting,
+            commands::meeting::get_meeting_state,
+            commands::meeting::list_meetings,
+            commands::meeting::get_meeting,
+            commands::meeting::retry_meeting_transcription,
+            commands::meeting::rename_meeting,
+            commands::meeting::delete_meeting,
+            commands::meeting::get_meeting_audio_paths,
             helpers::clamshell::is_laptop,
         ])
         .events(collect_events![
             managers::history::HistoryUpdatePayload,
             managers::transcription::StreamTextEvent,
             managers::transcription::StreamPhaseEvent,
+            managers::meeting::MeetingStateEvent,
         ]);
 
     #[cfg(debug_assertions)] // <- Only export on non-release builds

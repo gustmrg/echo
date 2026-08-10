@@ -1,6 +1,15 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Cog, FlaskConical, History, Info, Sparkles, Cpu } from "lucide-react";
+import {
+  Cog,
+  FlaskConical,
+  History,
+  Info,
+  Sparkles,
+  Cpu,
+  UsersRound,
+} from "lucide-react";
+import { type as getOsType } from "@tauri-apps/plugin-os";
 import HandyTextLogo from "./icons/HandyTextLogo";
 import HandyHand from "./icons/HandyHand";
 import { useSettings } from "../hooks/useSettings";
@@ -13,6 +22,7 @@ import {
   PostProcessingSettings,
   ModelsSettings,
 } from "./settings";
+import { MeetingsPage } from "./meetings";
 
 export type SidebarSection = keyof typeof SECTIONS_CONFIG;
 
@@ -43,6 +53,15 @@ export const SECTIONS_CONFIG = {
     icon: History,
     component: HistorySettings,
     enabled: () => true,
+  },
+  meetings: {
+    labelKey: "sidebar.meetings",
+    icon: UsersRound,
+    component: MeetingsPage,
+    enabled: () => {
+      const platform = getOsType();
+      return platform === "macos" || platform === "windows";
+    },
   },
   models: {
     labelKey: "sidebar.models",

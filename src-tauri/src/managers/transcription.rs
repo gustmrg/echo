@@ -1148,6 +1148,16 @@ impl TranscriptionManager {
     }
 
     pub fn transcribe(&self, audio: Vec<f32>) -> Result<String> {
+        self.transcribe_with_logging(audio, true)
+    }
+
+    /// Transcribe meeting chunks without writing their contents to application
+    /// logs. Timing and model diagnostics are still logged by the shared path.
+    pub fn transcribe_quiet(&self, audio: Vec<f32>) -> Result<String> {
+        self.transcribe_with_logging(audio, false)
+    }
+
+    fn transcribe_with_logging(&self, audio: Vec<f32>, log_result_text: bool) -> Result<String> {
         #[cfg(debug_assertions)]
         if std::env::var("HANDY_FORCE_TRANSCRIPTION_FAILURE").is_ok() {
             return Err(anyhow::anyhow!(
@@ -1496,7 +1506,7 @@ impl TranscriptionManager {
 
         if final_result.is_empty() {
             info!("Transcription result is empty");
-        } else {
+        } else if log_result_text {
             info!("Transcription result: {}", final_result);
         }
 
