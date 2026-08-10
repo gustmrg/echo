@@ -1,0 +1,70 @@
+# Forking guide — Echo (soft fork of Handy)
+
+Echo tracks [cjpais/Handy](https://github.com/cjpais/Handy) as a **soft fork**:
+stay mergeable with upstream, keep the local diff small and deliberate.
+
+## Remotes
+
+- `upstream` — https://github.com/cjpais/Handy.git (read-only reference)
+- `origin` — your own GitHub repo (add it once created, e.g.
+  `git remote add origin git@github.com:<you>/Echo.git`)
+
+## Syncing with upstream
+
+```sh
+git fetch upstream
+git merge upstream/main        # resolve conflicts, favoring upstream structure
+```
+
+Sync regularly — small frequent merges beat one giant one. After each sync,
+re-check the "Intentional divergences" list below: upstream changes to those
+files are the conflicts you should expect.
+
+## Rules of thumb
+
+- **Don't rename** internal identifiers (crate name `handy`, `handy-keys`,
+  component names like `HandyTextLogo`). They're invisible to users and every
+  rename is a future merge conflict.
+- **Do change** anything user-visible or identity-bearing (see list below).
+- New Echo-only features go in their own files/modules where possible rather
+  than inline edits to upstream files.
+- Handy's brand assets (logo, icon art, tray glyphs) are **not open source**.
+  They are currently restored from upstream for local development only —
+  replace them with your own art (see `scripts/generate-placeholder-icons.py`)
+  before distributing anything.
+
+## Intentional divergences (the whole fork diff, by design)
+
+| File | Change |
+| --- | --- |
+| `src-tauri/tauri.conf.json` | `productName` → Echo, `identifier` → `com.gustmrg.echo`, upstream `signCommand` removed, updater endpoint repointed |
+| `package.json` | `name` → `echo-app` |
+| `index.html` | `<title>` → Echo |
+| `src/components/icons/HandyTextLogo.tsx` | Handy wordmark replaced with placeholder Echo wordmark |
+| `src/styles/theme.css` + 4 components | Pink accent replaced with Kimi blue `#1888F8` |
+| `README.md` | Echo readme with upstream attribution |
+| `sponsor-images/` | Removed (Handy brand assets) |
+| `mock/` | Echo UI mock (Echo-only, not from upstream) |
+
+Note: `src-tauri/icons/` and `src-tauri/resources/*.png` currently match
+upstream — Handy's original art was restored for local dev. These are NOT
+distributable (not open source); regenerate placeholders with
+`scripts/generate-placeholder-icons.py` + `npx @tauri-apps/cli icon` or
+commission real art before release.
+
+## Still to do before a release
+
+- **Updater keys**: `pubkey` in `tauri.conf.json` is intentionally empty
+  (update checks fail closed). Generate your own with
+  `npx @tauri-apps/cli signer generate` and set the pubkey + your repo's
+  release endpoint.
+- **Bundle identifier**: `com.gustmrg.echo` is a placeholder — use a domain
+  you control.
+- **Code signing**: macOS builds are ad-hoc signed (`signingIdentity: "-"`);
+  Windows signing was upstream's Azure account and has been removed.
+- **Model CDN**: the model catalog downloads from upstream's
+  `blob.handy.computer`. Fine for development, but decide whether to mirror
+  models before shipping — you depend on their infrastructure and goodwill.
+- **Brand art**: icons/tray glyphs are upstream Handy's (restored for local
+  dev) and must be replaced before distribution — upstream's brand assets are
+  not open source.
