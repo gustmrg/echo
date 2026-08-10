@@ -3,17 +3,23 @@
 Echo tracks [cjpais/Handy](https://github.com/cjpais/Handy) as a **soft fork**:
 stay mergeable with upstream, keep the local diff small and deliberate.
 
-## Remotes
+## Remotes and branches
 
 - `upstream` — https://github.com/cjpais/Handy.git (read-only reference)
-- `origin` — your own GitHub repo (add it once created, e.g.
-  `git remote add origin git@github.com:<you>/Echo.git`)
+- `origin` — https://github.com/gustmrg/Echo (**private** — it currently
+  contains Handy's non-distributable brand assets; keep it private or
+  replace the art before going public)
+- `main` — pristine mirror of upstream. Never commit fork changes here;
+  it exists so `git merge upstream/main` stays a clean fast-forward.
+- `dev` — default branch, your fork's work lives here. Feature work happens
+  on branches off `dev` and merges back.
 
 ## Syncing with upstream
 
 ```sh
-git fetch upstream
-git merge upstream/main        # resolve conflicts, favoring upstream structure
+git switch main && git fetch upstream && git merge upstream/main
+git push origin main
+git switch dev && git merge main    # resolve conflicts, favoring upstream structure
 ```
 
 Sync regularly — small frequent merges beat one giant one. After each sync,
