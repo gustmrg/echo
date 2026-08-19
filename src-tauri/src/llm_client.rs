@@ -147,9 +147,9 @@ fn build_headers(provider: &PostProcessProvider, api_key: &str) -> Result<Header
     );
     headers.insert(
         USER_AGENT,
-        HeaderValue::from_static("Echo/1.0 (+https://github.com/gustmrg/Echo)"),
+        HeaderValue::from_static("Parler/1.0 (+https://github.com/gustmrg/Echo)"),
     );
-    headers.insert("X-Title", HeaderValue::from_static("Echo"));
+    headers.insert("X-Title", HeaderValue::from_static("Parler"));
 
     // Provider-specific auth headers
     if !api_key.is_empty() {

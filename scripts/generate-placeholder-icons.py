@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Generate placeholder brand art for the Echo fork.
+"""Generate placeholder brand art for the Parler fork.
 
 Handy's icons, logo, and tray images are NOT open source, so this fork ships
-its own placeholders: a dark rounded-square app icon with signal-red waveform
-bars (matching the Echo UI mock), plus simple 64px tray/status glyphs.
+its own placeholders: a dark rounded-square app icon with a microphone glyph
+and a signal-red lock badge (speech + privacy theme), plus simple 64px
+tray/status glyphs.
 
 Uses only the Python standard library (zlib) to write PNGs.
 Re-run after changing BRAND colors; regenerate the Tauri icon set with:
 
-    npx --yes @tauri-apps/cli icon scripts/echo-icon-source.png
+    npx --yes @tauri-apps/cli icon scripts/parler-icon-source.png
 
 Replace all of these files with real brand art before a public release.
 """
@@ -69,6 +70,18 @@ class Canvas:
                 if abs(d - r) <= thickness / 2:
                     self.blend(x, y, color)
 
+    def arc(self, cx, cy, r, thickness, a0, a1, color):
+        """Ring segment; angles in degrees, 0 = +x axis, clockwise (y down)."""
+        ext = r + thickness / 2 + 1
+        for y in range(int(cy - ext), int(cy + ext)):
+            for x in range(int(cx - ext), int(cx + ext)):
+                d = math.hypot(x - cx, y - cy)
+                if abs(d - r) > thickness / 2:
+                    continue
+                ang = math.degrees(math.atan2(y - cy, x - cx)) % 360
+                if a0 <= ang <= a1:
+                    self.blend(x, y, color)
+
     def bars(self, cx, cy, heights, width, gap, color):
         n = len(heights)
         total = n * width + (n - 1) * gap
@@ -77,6 +90,27 @@ class Canvas:
             self.rounded_rect(x, cy - hgt / 2, x + width, cy + hgt / 2,
                               width / 2, color)
             x += width + gap
+
+    def mic(self, cx, cy, s, color):
+        """Microphone glyph centered on (cx, cy); s = scale (1.0 at 64px)."""
+        # capsule
+        self.rounded_rect(cx - 7 * s, cy - 24 * s, cx + 7 * s, cy + 4 * s,
+                          7 * s, color)
+        # cradle arc (lower half)
+        self.arc(cx, cy + 2 * s, 13 * s, 4 * s, 20, 160, color)
+        # stem + base
+        self.rounded_rect(cx - 2 * s, cy + 13 * s, cx + 2 * s, cy + 19 * s,
+                          2 * s, color)
+        self.rounded_rect(cx - 9 * s, cy + 19 * s, cx + 9 * s, cy + 23 * s,
+                          2 * s, color)
+
+    def lock_badge(self, cx, cy, r, disc_color, lock_color):
+        """Padlock badge: disc with shackle arc + body."""
+        self.disc(cx, cy, r, disc_color)
+        s = r / 180.0  # authored at r=180
+        self.arc(cx, cy - 10 * s, 58 * s, 38 * s, 180, 360, lock_color)
+        self.rounded_rect(cx - 60 * s, cy - 15 * s, cx + 60 * s, cy + 80 * s,
+                          26 * s, lock_color)
 
     def save(self, path):
         rows = bytearray()
@@ -102,9 +136,9 @@ class Canvas:
 def app_icon(size, path):
     c = Canvas(size, size)
     c.rounded_rect(0, 0, size, size, size * 0.225, INK)
-    s = size / 1240.0  # authored at 1240px
-    heights = [h * s for h in (260, 430, 640, 820, 640, 430, 260)]
-    c.bars(size / 2, size / 2, heights, 88 * s, 64 * s, SIGNAL)
+    s = (size / 64.0) * 0.82  # mic authored at 64px, leave breathing room
+    c.mic(size / 2, size / 2 - 20 * (size / 1240.0), s, LIGHT)
+    c.lock_badge(size * 0.76, size * 0.74, size * 0.145, SIGNAL, LIGHT)
     c.save(path)
 
 
@@ -116,28 +150,28 @@ def glyph(path, draw):
 
 def main():
     # source for `tauri icon` (regenerates src-tauri/icons/*)
-    app_icon(1240, os.path.join(ROOT, "scripts", "echo-icon-source.png"))
+    app_icon(1240, os.path.join(ROOT, "scripts", "parler-icon-source.png"))
 
     res = os.path.join(ROOT, "src-tauri", "resources")
 
-    def bars(color):
-        return lambda c: c.bars(32, 32, [16, 26, 36, 26, 16], 6, 5, color)
+    def mic(color):
+        return lambda c: c.mic(32, 32, 1.0, color)
 
     glyphs = {
-        "tray_idle.png": bars(GRAY),
-        "tray_idle_dark.png": bars(LIGHT),
-        "tray_recording.png": bars(SIGNAL),
-        "tray_recording_dark.png": bars(SIGNAL),
+        "tray_idle.png": mic(GRAY),
+        "tray_idle_dark.png": mic(LIGHT),
+        "tray_recording.png": mic(SIGNAL),
+        "tray_recording_dark.png": mic(SIGNAL),
         "tray_transcribing.png": lambda c: c.ring(32, 32, 18, 7, GRAY),
         "tray_transcribing_dark.png": lambda c: c.ring(32, 32, 18, 7, LIGHT),
-        "tray_idle_warning.png": lambda c: (bars(GRAY)(c), c.disc(50, 14, 8, AMBER)),
-        "tray_idle_warning_dark.png": lambda c: (bars(LIGHT)(c), c.disc(50, 14, 8, AMBER)),
+        "tray_idle_warning.png": lambda c: (mic(GRAY)(c), c.disc(50, 14, 8, AMBER)),
+        "tray_idle_warning_dark.png": lambda c: (mic(LIGHT)(c), c.disc(50, 14, 8, AMBER)),
         "recording.png": lambda c: c.disc(32, 32, 20, SIGNAL),
         "transcribing.png": lambda c: c.ring(32, 32, 18, 7, GRAY),
         "handy.png": lambda c: (c.rounded_rect(4, 4, 60, 60, 14, INK),
-                                c.bars(32, 32, [14, 24, 32, 24, 14], 5, 4, SIGNAL)),
+                                c.mic(32, 31, 0.8, SIGNAL)),
         "handy_warning.png": lambda c: (c.rounded_rect(4, 4, 60, 60, 14, INK),
-                                        c.bars(32, 32, [14, 24, 32, 24, 14], 5, 4, AMBER)),
+                                        c.mic(32, 31, 0.8, AMBER)),
     }
     for name, draw in glyphs.items():
         glyph(os.path.join(res, name), draw)

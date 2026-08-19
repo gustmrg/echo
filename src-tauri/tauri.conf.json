@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Echo",
+  "productName": "Parler",
   "version": "0.9.5",
-  "identifier": "com.gustmrg.echo",
+  "identifier": "com.gustmrg.parler",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
