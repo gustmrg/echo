@@ -1,0 +1,9 @@
+bin
+*.db
+*.db-shm
+*.db-wal
+.git
+.gitignore
+Dockerfile
+README.md
+TODO.md
