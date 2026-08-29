@@ -30,3 +30,7 @@ export interface Store {
   failJob(job: TranscriptionJob, reason: string, signal: AbortSignal): Promise<void>
   close(): Promise<void>
 }
+
+export class StoreStateConflictError extends Error {
+  override readonly name = 'StoreStateConflictError'
+}
