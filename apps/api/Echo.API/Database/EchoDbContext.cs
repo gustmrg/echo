@@ -40,8 +40,8 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
             entity.Property(recording => recording.ContentType)
                 .HasMaxLength(100);
 
-            entity.Property(recording => recording.S3Key)
-                .HasColumnName("s3_key")
+            entity.Property(recording => recording.StorageKey)
+                .HasColumnName("storage_key")
                 .HasMaxLength(1024);
 
             entity.Property(recording => recording.TranscribedText);

@@ -42,10 +42,10 @@ namespace Echo.API.Database.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("file_size_bytes");
 
-                    b.Property<string>("S3Key")
+                    b.Property<string>("StorageKey")
                         .HasMaxLength(1024)
                         .HasColumnType("TEXT")
-                        .HasColumnName("s3_key");
+                        .HasColumnName("storage_key");
 
                     b.Property<string>("Status")
                         .IsRequired()

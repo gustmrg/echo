@@ -19,15 +19,15 @@ public class DeleteRecording
         if (recording is null)
             return Results.NotFound();
 
-        if (!string.IsNullOrWhiteSpace(recording.S3Key))
+        if (!string.IsNullOrWhiteSpace(recording.StorageKey))
         {
             try
             {
-                await fileStorage.DeleteAsync(recording.S3Key);
+                await fileStorage.DeleteAsync(recording.StorageKey, ct);
             }
             catch (Exception deleteError)
             {
-                logger.LogError(deleteError, "Failed to delete file {FileKey} for recording {RecordingId}", recording.S3Key, recording.Id);
+                logger.LogError(deleteError, "Failed to delete file {FileKey} for recording {RecordingId}", recording.StorageKey, recording.Id);
                 return Results.Problem("File storage is unavailable");
             }
         }

@@ -14,36 +14,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddOptions<S3Options>()
-            .BindConfiguration(S3Options.SectionName)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-
-        // TODO: Improve logic to use MinIO only in dev environment
-        services.AddSingleton<IAmazonS3>(sp =>
-        {
-            var s3Options = sp.GetRequiredService<IOptions<S3Options>>().Value;
-            var config = new AmazonS3Config
-            {
-                ForcePathStyle = s3Options.ForcePathStyle,
-                RequestChecksumCalculation = RequestChecksumCalculation.WHEN_REQUIRED,
-                ResponseChecksumValidation = ResponseChecksumValidation.WHEN_REQUIRED,
-            };
-
-            if (!string.IsNullOrWhiteSpace(s3Options.ServiceUrl))
-            {
-                // ServiceUrl is only needed for custom S3-compatible endpoints such as local MinIO.
-                config.ServiceURL = s3Options.ServiceUrl;
-                config.AuthenticationRegion = s3Options.Region;
-            }
-            else
-            {
-                config.RegionEndpoint = RegionEndpoint.GetBySystemName(s3Options.Region);
-            }
-
-            var credentials = new BasicAWSCredentials(s3Options.AccessKey, s3Options.SecretKey);
-            return new AmazonS3Client(credentials, config);
-        });
+        services.AddFileStorage(configuration);
         
         services.AddDbContext<EchoDbContext>(options =>
         {
@@ -51,8 +22,6 @@ public static class ServiceCollectionExtensions
                 .UseSnakeCaseNamingConvention();
         });
         
-        services.AddSingleton<IFileStorage, MinioFileStorage>();
-
         #region Configure RabbitMQ
 
         services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
@@ -80,6 +49,52 @@ public static class ServiceCollectionExtensions
         
         return services;
     }
-    
-    
+
+    public static IServiceCollection AddFileStorage(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.AddOptions<StorageOptions>()
+            .Bind(configuration.GetSection(StorageOptions.SectionName))
+            .Validate(options => Enum.IsDefined(options.Provider), "Storage provider must be Local or S3.")
+            .Validate(
+                options => options.Provider != StorageProvider.Local ||
+                    !string.IsNullOrWhiteSpace(options.Local.RootPath),
+                "Storage:Local:RootPath is required when Storage:Provider is Local.")
+            .Validate(
+                options => options.Provider != StorageProvider.S3 ||
+                    !string.IsNullOrWhiteSpace(options.S3.BucketName),
+                "Storage:S3:BucketName is required when Storage:Provider is S3.")
+            .Validate(
+                options => options.Provider != StorageProvider.S3 ||
+                    !string.IsNullOrWhiteSpace(options.S3.Region),
+                "Storage:S3:Region is required when Storage:Provider is S3.")
+            .ValidateOnStart();
+
+        services.AddSingleton<IAmazonS3>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<StorageOptions>>().Value.S3;
+            var s3Config = new AmazonS3Config
+            {
+                RegionEndpoint = RegionEndpoint.GetBySystemName(options.Region),
+                RequestChecksumCalculation = RequestChecksumCalculation.WHEN_REQUIRED,
+                ResponseChecksumValidation = ResponseChecksumValidation.WHEN_REQUIRED,
+            };
+
+            return new AmazonS3Client(s3Config);
+        });
+
+        services.AddSingleton<IFileStorage>(sp =>
+        {
+            var provider = sp.GetRequiredService<IOptions<StorageOptions>>().Value.Provider;
+            return provider switch
+            {
+                StorageProvider.Local => ActivatorUtilities.CreateInstance<LocalFileStorage>(sp),
+                StorageProvider.S3 => ActivatorUtilities.CreateInstance<S3FileStorage>(sp),
+                _ => throw new InvalidOperationException($"Unsupported storage provider '{provider}'."),
+            };
+        });
+
+        return services;
+    }
 }

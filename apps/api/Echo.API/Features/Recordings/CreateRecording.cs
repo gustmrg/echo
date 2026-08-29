@@ -55,7 +55,7 @@ public class CreateRecording
             FileName = file.FileName,
             FileSizeBytes = file.Length,
             ContentType = contentType,
-            S3Key = fileKey,    
+            StorageKey = fileKey,
             Status = RecordingStatus.Pending
         };
         
