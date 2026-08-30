@@ -1,6 +1,8 @@
 # Echo
 
-Echo is a text-to-speech workflow app that records audio, transcribes it to text, then uses AI to polish and structure the text. It is designed for fast capture, review, and publishing-ready outputs.
+Echo is a speech-to-text workflow app that records audio, transcribes it, then
+uses AI to polish and structure the text. It is designed for fast capture,
+review, and publishing-ready outputs.
 
 ## What you can create
 
@@ -20,19 +22,22 @@ Echo is a text-to-speech workflow app that records audio, transcribes it to text
 
 ## Architecture
 
-![Echo system architecture](docs/architecture.png)
-
-Echo currently runs as a backend workflow made of an API service, a background
-worker, shared SQLite persistence, S3-compatible object storage, and a
-RabbitMQ broker:
+Echo currently runs as an API service and a TypeScript background worker. They
+share SQLite persistence and file storage. Local development stores audio on
+the shared Docker volume; production uses AWS S3.
 
 ```text
 apps/api/       .NET Minimal API for recording ingestion and metadata
-apps/worker/    Go worker for queued transcription jobs
+apps/worker-ts/ TypeScript worker for polled transcription jobs
 SQLite          shared database for recordings and transcription jobs
-MinIO/S3        object storage for uploaded audio files
+Local/S3        audio storage selected by environment
 RabbitMQ        message broker for asynchronous workflows
 ```
+
+The API creates a recording and transcription job, then publishes an event to
+RabbitMQ. The transcription worker currently schedules work by polling SQLite,
+reads the corresponding audio file, calls OpenRouter or OpenAI, and atomically
+stores the resulting transcript.
 
 ## Run with Docker Compose
 
@@ -45,8 +50,6 @@ cp .env.example .env
 Fill in the required values in `.env`:
 
 ```dotenv
-MINIO_ROOT_USER=minioadmin
-MINIO_ROOT_PASSWORD=minioadmin
 TRANSCRIPTION_PROVIDER=openrouter
 OPENROUTER_API_KEY=your-openrouter-api-key
 OPENROUTER_TRANSCRIPTION_MODEL=openai/gpt-4o-mini-transcribe
@@ -61,13 +64,13 @@ docker compose up --build
 The Compose stack starts:
 
 - `api`: .NET API on `http://localhost:8080`
-- `worker`: Go background worker for transcription jobs
-- `minio`: S3-compatible object storage on `http://localhost:9000`
-- `minio` console: `http://localhost:9001`
+- `worker`: TypeScript background worker for transcription jobs
 - `rabbitmq`: RabbitMQ broker on `localhost:5672`
 - `rabbitmq` management UI: `http://localhost:15672`
 
-The API and worker share a SQLite database through the `appdata` Docker volume. Uploaded audio files are stored in MinIO in the `echo-files` bucket, which is created automatically by the `minio-init` service.
+The API and worker share the SQLite database and locally uploaded audio through
+the `appdata` Docker volume. Production Compose configuration switches both
+services to AWS S3.
 
 RabbitMQ uses the default local credentials `echo` / `echo` in Compose.
 
@@ -79,7 +82,8 @@ docker compose down
 docker compose down -v
 ```
 
-Use `docker compose down -v` only when you want to remove the SQLite and MinIO Docker volumes.
+Use `docker compose down -v` only when you want to remove the SQLite database
+and locally uploaded audio.
 
 ## License
 

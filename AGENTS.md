@@ -17,31 +17,33 @@ Each feature lives under `Features/<FeatureName>/` with its own endpoint registr
 - IDs use `Guid.CreateVersion7()` (time-ordered UUIDs).
 
 ### File Storage
-- `IFileStorage` abstracts upload/download/delete operations against S3-compatible storage.
-- Local development uses MinIO; production uses AWS S3.
-- File keys are structured by context and identifier (e.g., `audio-recordings/<id>/<filename>`).
+- `IFileStorage` abstracts upload/download/delete operations.
+- Local development uses the filesystem; production uses AWS S3.
+- File keys are structured by context and identifier (e.g., `recordings/<id>/<filename>`).
 
-## Back-End Patterns (Worker — Go)
+## Back-End Patterns (Worker — TypeScript / Node.js)
 
 ### Poll-Based Job Processing
 - The worker runs a continuous loop that polls SQLite for pending `TranscriptionJob` rows.
-- Graceful shutdown via `signal.NotifyContext` (SIGINT/SIGTERM).
-- On each iteration: fetch next pending job → download audio from S3 → transcribe → update job and recording status.
+- Graceful shutdown uses an `AbortSignal` triggered by SIGINT/SIGTERM.
+- On each iteration: atomically claim the next job → open audio from local/S3 storage → transcribe → atomically update job and recording status.
+- Interrupted processing jobs remain leased and are reclaimed after `PROCESSING_LEASE_MS`.
 
-### Internal Package Layout
-- `internal/config` — loads environment variables into a typed config struct.
-- `internal/db` — raw SQL queries via `database/sql` (no ORM); a `Store` type wraps the connection.
-- `internal/storage` — S3 client for downloading audio files.
-- `internal/transcription` — `Transcriber` interface with provider implementations (OpenRouter, OpenAI).
+### Source Layout
+- `src/config` — validates environment variables into a typed configuration.
+- `src/db` — raw SQL through Node's built-in SQLite client.
+- `src/storage` — local filesystem and AWS S3 streaming readers.
+- `src/transcription` — OpenRouter and OpenAI provider adapters.
+- `src/worker.ts` — polling and per-job orchestration.
 
 ### Shared Infrastructure
-- Both API and worker share the same SQLite database file and MinIO/S3 bucket.
-- Docker Compose mounts a shared `appdata` volume for the database.
+- Both API and worker share the SQLite database and selected file storage.
+- Docker Compose mounts `appdata` for the database and local audio files.
 
 ## Commits
 
 - Use Conventional Commits format: `<type>(<project>): <summary>`.
-- Use the project name as the commit scope. For example, use `feat(worker): ...` for worker changes and `feat(api): ...` for API changes.
+- Use the project name as the commit scope. For example, use `feat(worker-ts): ...` for worker changes and `feat(api): ...` for API changes.
 - Do not include files from more than one project in the same commit.
 - Commit repository-wide guidance or configuration separately from project-specific changes.
 - Keep commit summaries imperative, concise, and without a trailing period.
