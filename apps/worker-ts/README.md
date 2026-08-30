@@ -14,10 +14,11 @@ pnpm lint
 pnpm build
 ```
 
-The entrypoint currently validates configuration and exits. The Phase 4 SQLite
-store implements atomic job claiming, terminal state transitions, and stale
-processing-lease recovery. Storage, transcription, and processing-loop wiring
-are implemented in later phases.
+The entrypoint currently validates configuration and exits. The SQLite store
+implements atomic job claiming, terminal state transitions, and stale
+processing-lease recovery. Phase 5 adds streaming readers for local files and
+AWS S3. Transcription and processing-loop wiring are implemented in later
+phases.
 
 ## Configuration
 
