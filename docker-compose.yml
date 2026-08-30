@@ -3,9 +3,50 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
+    user: "${ECHO_APP_UID:-1654}"
     environment:
       ConnectionStrings__DefaultConnection: "Data Source=/data/echo.db"
       Storage__Local__RootPath: "/data/files"
+      RabbitMQ__HostName: rabbitmq
+      RabbitMQ__UserName: echo
+      RabbitMQ__Password: echo
+    depends_on:
+      data-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - appdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /data/echo.db"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    networks:
+      - echo-network
+
+  worker:
+    build:
+      context: ./apps/worker-ts
+      dockerfile: Dockerfile
+    user: "${ECHO_APP_UID:-1654}"
+    environment:
+      NODE_ENV: Development
+      DB_PATH: /data/echo.db
+      POLL_INTERVAL_MS: "${POLL_INTERVAL_MS:-5000}"
+      PROCESSING_LEASE_MS: "${PROCESSING_LEASE_MS:-900000}"
+      STORAGE_PROVIDER: local
+      STORAGE_LOCAL_ROOT: /data/files
+      TRANSCRIPTION_PROVIDER: "${TRANSCRIPTION_PROVIDER:-openrouter}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      OPENROUTER_BASE_URL: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
+      OPENROUTER_TRANSCRIPTION_MODEL: "${OPENROUTER_TRANSCRIPTION_MODEL:-openai/gpt-4o-mini-transcribe}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+    depends_on:
+      data-init:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
     volumes:
       - appdata:/data
     networks:
@@ -19,6 +60,19 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: echo
       RABBITMQ_DEFAULT_PASS: echo
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - echo-network
+
+  data-init:
+    image: busybox:1.37
+    command: ["sh", "-c", "mkdir -p /data/files && chmod -R 0777 /data"]
+    volumes:
+      - appdata:/data
 
 volumes:
   appdata:
