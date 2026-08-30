@@ -17,8 +17,8 @@ pnpm build
 The entrypoint currently validates configuration and exits. The SQLite store
 implements atomic job claiming, terminal state transitions, and stale
 processing-lease recovery. Phase 5 adds streaming readers for local files and
-AWS S3. Transcription and processing-loop wiring are implemented in later
-phases.
+AWS S3. Phase 6 adds OpenRouter and OpenAI transcription adapters. Processing-
+loop wiring is implemented in a later phase.
 
 ## Configuration
 

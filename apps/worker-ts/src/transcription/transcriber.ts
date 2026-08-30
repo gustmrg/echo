@@ -12,3 +12,11 @@ export interface Transcriber {
     signal: AbortSignal,
   ): Promise<string>
 }
+
+export class UnsupportedAudioFormatError extends Error {
+  override readonly name = 'UnsupportedAudioFormatError'
+}
+
+export class TranscriptionError extends Error {
+  override readonly name = 'TranscriptionError'
+}
