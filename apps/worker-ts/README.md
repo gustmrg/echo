@@ -18,7 +18,8 @@ The entrypoint currently validates configuration and exits. The SQLite store
 implements atomic job claiming, terminal state transitions, and stale
 processing-lease recovery. Phase 5 adds streaming readers for local files and
 AWS S3. Phase 6 adds OpenRouter and OpenAI transcription adapters. Processing-
-loop wiring is implemented in a later phase.
+loop wiring, polling, and graceful shutdown are implemented in Phase 7. Compose
+still runs the Go worker until the final migration phase.
 
 ## Configuration
 
