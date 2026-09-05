@@ -7,14 +7,9 @@ services:
     environment:
       ConnectionStrings__DefaultConnection: "Data Source=/data/echo.db"
       Storage__Local__RootPath: "/data/files"
-      RabbitMQ__HostName: rabbitmq
-      RabbitMQ__UserName: echo
-      RabbitMQ__Password: echo
     depends_on:
       data-init:
         condition: service_completed_successfully
-      rabbitmq:
-        condition: service_healthy
     volumes:
       - appdata:/data
     healthcheck:
@@ -34,6 +29,9 @@ services:
       NODE_ENV: Development
       DB_PATH: /data/echo.db
       POLL_INTERVAL_MS: "${POLL_INTERVAL_MS:-5000}"
+      JOB_TIMEOUT_MS: "${JOB_TIMEOUT_MS:-120000}"
+      REFINEMENT_MODEL: "${REFINEMENT_MODEL:-}"
+      REFINEMENT_BASE_URL: "${REFINEMENT_BASE_URL:-}"
       PROCESSING_LEASE_MS: "${PROCESSING_LEASE_MS:-900000}"
       STORAGE_PROVIDER: local
       STORAGE_LOCAL_ROOT: /data/files
@@ -49,22 +47,6 @@ services:
         condition: service_healthy
     volumes:
       - appdata:/data
-    networks:
-      - echo-network
-
-  rabbitmq:
-    image: rabbitmq:4-management
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: echo
-      RABBITMQ_DEFAULT_PASS: echo
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
     networks:
       - echo-network
 

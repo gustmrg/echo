@@ -483,3 +483,6 @@ $RECYCLE.BIN/
 
 # Vite build directory
 dist/
+# Local package cache and browser test artifacts
+.pnpm-store/
+playwright-report/
