@@ -8,6 +8,10 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
     public DbSet<Recording> Recordings => Set<Recording>();
     public DbSet<TranscriptionJob> TranscriptionJobs => Set<TranscriptionJob>();
 
+    public DbSet<RefinementRequest> RefinementRequests => Set<RefinementRequest>();
+
+    public DbSet<RefinementJob> RefinementJobs => Set<RefinementJob>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Recording>(entity =>
@@ -45,6 +49,9 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
                 .HasMaxLength(1024);
 
             entity.Property(recording => recording.TranscribedText);
+            entity.HasIndex(recording => recording.UploadKey).IsUnique();
+            entity.Property(recording => recording.UploadKey).HasMaxLength(36);
+            entity.Property(recording => recording.TranscriptRevision).IsConcurrencyToken();
 
             entity.Property(recording => recording.CreatedAt)
                 .IsRequired();
@@ -89,6 +96,25 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
                 .WithOne(recording => recording.TranscriptionJob)
                 .HasForeignKey<TranscriptionJob>(transcriptionJob => transcriptionJob.RecordingId)
                 .IsRequired()
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<RefinementJob>(entity =>
+        {
+            entity.ToTable("refinement_jobs");
+            entity.HasKey(job => job.Id);
+            entity.Property(job => job.Id).ValueGeneratedNever();
+            entity.Property(job => job.Status).HasConversion(
+                v => v.ToString().ToLowerInvariant(), v => Enum.Parse<JobStatus>(v, true));
+            entity.HasIndex(job => new { job.RecordingId, job.RequestKey }).IsUnique();
+            entity.HasIndex(job => new { job.RecordingId, job.TranscriptRevision, job.Format });
+            entity.HasOne(job => job.Recording).WithMany().HasForeignKey(job => job.RecordingId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<RefinementRequest>(entity =>
+        {
+            entity.ToTable("refinement_requests");
+            entity.HasKey(request => new { request.RecordingId, request.RequestKey });
+            entity.HasOne(request => request.Job).WithMany().HasForeignKey(request => request.JobId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

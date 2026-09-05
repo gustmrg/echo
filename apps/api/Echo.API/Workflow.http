@@ -1,0 +1,44 @@
+@baseUrl = http://localhost:5143
+@recordingId = 00000000-0000-0000-0000-000000000000
+
+### List recordings
+GET {{baseUrl}}/api/recordings
+
+### Get a recording (404 for the example ID)
+GET {{baseUrl}}/api/recordings/{{recordingId}}
+
+### Upload audio; reuse this key only when retrying the same file
+POST {{baseUrl}}/api/recordings
+Idempotency-Key: 0199137f-8455-7000-8000-000000000001
+Content-Type: multipart/form-data; boundary=echo-upload
+
+--echo-upload
+Content-Disposition: form-data; name="file"; filename="audio.webm"
+Content-Type: audio/webm
+
+< ./audio.webm
+--echo-upload--
+
+### Save reviewed text; use transcriptRevision from GET
+PUT {{baseUrl}}/api/recordings/{{recordingId}}/transcript
+Content-Type: application/json
+
+{"text":"Reviewed notes.","expectedRevision":1}
+
+### Retry a failed transcription; use retryCount from GET
+POST {{baseUrl}}/api/recordings/{{recordingId}}/retry
+Content-Type: application/json
+
+{"expectedRetryCount":3}
+
+### Queue or reuse Notes for this saved revision
+POST {{baseUrl}}/api/recordings/{{recordingId}}/refinements
+Content-Type: application/json
+
+{"format":"notes","expectedRevision":2,"requestKey":"0199137f-8455-7000-8000-000000000002","regenerate":false}
+
+### Read progress and saved outputs for the current transcript revision
+GET {{baseUrl}}/api/recordings/{{recordingId}}/refinements
+
+### Delete recording, transcript, jobs, outputs, and uploaded audio
+DELETE {{baseUrl}}/api/recordings/{{recordingId}}

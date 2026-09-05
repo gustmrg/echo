@@ -32,6 +32,10 @@ namespace Echo.API.Database.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("EditedText")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("edited_text");
+
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -42,16 +46,16 @@ namespace Echo.API.Database.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("file_size_bytes");
 
-                    b.Property<string>("StorageKey")
-                        .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("storage_key");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("TEXT")
                         .HasColumnName("status");
+
+                    b.Property<string>("StorageKey")
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("storage_key");
 
                     b.Property<string>("Title")
                         .HasMaxLength(200)
@@ -62,14 +66,155 @@ namespace Echo.API.Database.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("transcribed_text");
 
+                    b.Property<int>("TranscriptRevision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("transcript_revision");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UploadHash")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("upload_hash");
+
+                    b.Property<string>("UploadKey")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("upload_key");
+
+                    b.HasKey("Id")
+                        .HasName("pk_recordings");
+
+                    b.HasIndex("UploadKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_recordings_upload_key");
+
+                    b.ToTable("recordings", (string)null);
+                });
+
+            modelBuilder.Entity("Echo.API.Entities.RefinementJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("attempt_count");
+
+                    b.Property<string>("ClaimToken")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("claim_token");
+
+                    b.Property<string>("Content")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("content");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FailureReason")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("failure_reason");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("format");
+
+                    b.Property<string>("Model")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("model");
+
+                    b.Property<DateTime?>("NextAttemptAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<string>("PromptVersion")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("prompt_version");
+
+                    b.Property<string>("Provider")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("provider");
+
+                    b.Property<Guid>("RecordingId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("recording_id");
+
+                    b.Property<string>("RequestKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("request_key");
+
+                    b.Property<string>("SourceText")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("source_text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
+
+                    b.Property<int>("TranscriptRevision")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("transcript_revision");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
-                        .HasName("pk_recordings");
+                        .HasName("pk_refinement_jobs");
 
-                    b.ToTable("recordings", (string)null);
+                    b.HasIndex("RecordingId", "RequestKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_refinement_jobs_recording_id_request_key");
+
+                    b.HasIndex("RecordingId", "TranscriptRevision", "Format")
+                        .HasDatabaseName("ix_refinement_jobs_recording_id_transcript_revision_format");
+
+                    b.ToTable("refinement_jobs", (string)null);
+                });
+
+            modelBuilder.Entity("Echo.API.Entities.RefinementRequest", b =>
+                {
+                    b.Property<Guid>("RecordingId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("recording_id");
+
+                    b.Property<string>("RequestKey")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("request_key");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("format");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("job_id");
+
+                    b.Property<bool>("Regenerate")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("regenerate");
+
+                    b.Property<int>("TranscriptRevision")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("transcript_revision");
+
+                    b.HasKey("RecordingId", "RequestKey")
+                        .HasName("pk_refinement_requests");
+
+                    b.HasIndex("JobId")
+                        .HasDatabaseName("ix_refinement_requests_job_id");
+
+                    b.ToTable("refinement_requests", (string)null);
                 });
 
             modelBuilder.Entity("Echo.API.Entities.TranscriptionJob", b =>
@@ -77,6 +222,14 @@ namespace Echo.API.Database.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("attempt_count");
+
+                    b.Property<string>("ClaimToken")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("claim_token");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT")
@@ -86,6 +239,10 @@ namespace Echo.API.Database.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("TEXT")
                         .HasColumnName("failure_reason");
+
+                    b.Property<DateTime?>("NextAttemptAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("next_attempt_at");
 
                     b.Property<Guid>("RecordingId")
                         .HasColumnType("TEXT")
@@ -113,6 +270,30 @@ namespace Echo.API.Database.Migrations
                         .HasDatabaseName("ix_transcription_jobs_recording_id");
 
                     b.ToTable("transcription_jobs", (string)null);
+                });
+
+            modelBuilder.Entity("Echo.API.Entities.RefinementJob", b =>
+                {
+                    b.HasOne("Echo.API.Entities.Recording", "Recording")
+                        .WithMany()
+                        .HasForeignKey("RecordingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_refinement_jobs_recordings_recording_id");
+
+                    b.Navigation("Recording");
+                });
+
+            modelBuilder.Entity("Echo.API.Entities.RefinementRequest", b =>
+                {
+                    b.HasOne("Echo.API.Entities.RefinementJob", "Job")
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_refinement_requests_refinement_jobs_job_id");
+
+                    b.Navigation("Job");
                 });
 
             modelBuilder.Entity("Echo.API.Entities.TranscriptionJob", b =>

@@ -10,6 +10,11 @@ internal sealed record RecordingResponse(
     long FileSizeBytes,
     string? ContentType,
     string? TranscribedText,
+    string? EditedText,
+    int TranscriptRevision,
+    string? FailureReason,
+    int AttemptCount,
+    int RetryCount,
     DateTime CreatedAt,
     DateTime? UpdatedAt)
 {
@@ -23,6 +28,11 @@ internal sealed record RecordingResponse(
             recording.FileSizeBytes,
             recording.ContentType,
             recording.TranscribedText,
+            recording.EditedText,
+            recording.TranscriptRevision,
+            recording.TranscriptionJob?.FailureReason,
+            recording.TranscriptionJob?.AttemptCount ?? 0,
+            recording.TranscriptionJob?.RetryCount ?? 0,
             recording.CreatedAt,
             recording.UpdatedAt);
     }

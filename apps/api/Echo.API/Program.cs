@@ -1,6 +1,7 @@
 using Echo.API.Extensions;
 using Echo.API.Features.Recordings;
 using Scalar.AspNetCore;
+using Echo.API.Features.Refinements;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,5 +24,8 @@ app.UseHttpsRedirection();
 
 var api = app.MapGroup("api");
 api.MapRecordings();
+api.MapRefinements();
 
 app.Run();
+
+public partial class Program;

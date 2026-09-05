@@ -1,7 +1,9 @@
 using Echo.API.Database;
 using Echo.API.Entities;
 using Echo.API.Enums;
-using Echo.API.Messaging;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.EntityFrameworkCore;
 using Echo.API.Shared;
 using Echo.API.Storage;
 
@@ -16,7 +18,7 @@ public class CreateRecording
         IFileStorage fileStorage, 
         EchoDbContext dbContext,
         ILogger<CreateRecording> logger,
-        IMessagePublisher publisher,
+        HttpRequest request,
         CancellationToken ct = default)
     {
         if (file.Length == 0)
@@ -35,6 +37,18 @@ public class CreateRecording
             return Results.BadRequest("File content does not match its declared type.");
         
         stream.Position = 0;
+        var keyHeader = request.Headers["Idempotency-Key"].ToString();
+        if (!Guid.TryParse(keyHeader, out var uploadKey))
+            return Results.BadRequest("A UUID Idempotency-Key header is required.");
+        var key = uploadKey.ToString();
+        var audioHash = await SHA256.HashDataAsync(stream, ct);
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"{Convert.ToHexString(audioHash)}\n{file.FileName}\n{contentType}")));
+        stream.Position = 0;
+        var existing = await dbContext.Recordings.AsNoTracking()
+            .SingleOrDefaultAsync(r => r.UploadKey == key, ct);
+        if (existing is not null)
+            return Replay(existing, hash);
 
         var recordingId = Guid.CreateVersion7();
         var fileKey = fileStorage.CreateFileKey(file.FileName, FileStorageContext.AudioRecording, recordingId.ToString());
@@ -52,6 +66,8 @@ public class CreateRecording
         var record = new Recording
         {
             Id = recordingId,
+            UploadKey = key,
+            UploadHash = hash,
             FileName = file.FileName,
             FileSizeBytes = file.Length,
             ContentType = contentType,
@@ -86,19 +102,19 @@ public class CreateRecording
                 logger.LogError(cleanupError, "Failed to delete uploaded file {FileKey} after database save failure", fileKey);
             }
             
+            // A concurrent request with the same key may have won the unique index.
+            dbContext.ChangeTracker.Clear();
+            existing = await dbContext.Recordings.AsNoTracking()
+                .SingleOrDefaultAsync(r => r.UploadKey == key, ct);
+            if (existing is not null) return Replay(existing, hash);
             return Results.Problem("Failed to save recording.");
         }
 
-        var message = new TranscriptionRequestedMessage(recordingId, fileKey);
-        
-        await publisher.PublishAsync(
-            exchange: Exchanges.Events, 
-            Queues.RecordingWorker, 
-            RoutingKeys.Recording.TranscriptionRequested, 
-            message, ct);
-        
-        return Results.Created($"/recording/{record.Id}", RecordingResponse.FromRecording(record));
+        return Results.Created($"/api/recordings/{record.Id}", RecordingResponse.FromRecording(record));
     }
-}
 
-public record TranscriptionRequestedMessage(Guid RecordingId, string FileKey);
+    private static IResult Replay(Recording recording, string hash) =>
+        recording.UploadHash == hash
+            ? Results.Ok(RecordingResponse.FromRecording(recording))
+            : Results.Conflict("This upload key was already used for different audio.");
+}

@@ -10,8 +10,11 @@ public static class RecordingEndpoints
         group.MapPost("/", CreateRecording.Handle)
             .WithName("CreateRecording")
             .WithSummary("Create a recording")
-            .WithDescription("Creates a new recording entry.")
-            .Produces(StatusCodes.Status201Created)
+            .WithDescription("Uploads audio and queues transcription. Requires a UUID Idempotency-Key header; reuse it for retries of the same file.")
+            .Produces<RecordingResponse>(StatusCodes.Status201Created)
+            .Produces<RecordingResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status409Conflict)
             .DisableAntiforgery();
 
         group.MapGet("/", GetRecordings.Handle)
@@ -34,6 +37,12 @@ public static class RecordingEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound);
         
+        group.MapPut("{id:guid}/transcript", SaveTranscript.Handle)
+            .WithName("SaveTranscript").WithSummary("Save an edited transcript with revision checking")
+            .Produces<RecordingResponse>().Produces(400).Produces(404).Produces(409);
+        group.MapPost("{id:guid}/retry", RetryTranscription.Handle)
+            .WithName("RetryTranscription").WithSummary("Retry a failed transcription")
+            .Produces<RecordingResponse>(202).Produces(404).Produces(409);
         return endpoints;
     }
 }

@@ -10,6 +10,9 @@ public class TranscriptionJob
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
     public int RetryCount { get; set; }
+    public int AttemptCount { get; set; }
+    public string? ClaimToken { get; set; }
+    public DateTime? NextAttemptAt { get; set; }
     public string? FailureReason { get; set; }
 
     public Recording Recording { get; set; } = null!;
