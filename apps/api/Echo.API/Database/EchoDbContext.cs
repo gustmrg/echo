@@ -1,10 +1,13 @@
 using Echo.API.Entities;
+using Echo.API.Features.Jobs;
 using Echo.API.Enums;
 using Microsoft.EntityFrameworkCore;
 namespace Echo.API.Database;
 
 public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(options)
 {
+    public DbSet<JobOutbox> JobOutbox => Set<JobOutbox>();
+
     public DbSet<Recording> Recordings => Set<Recording>();
     public DbSet<TranscriptionJob> TranscriptionJobs => Set<TranscriptionJob>();
 
@@ -14,6 +17,7 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<JobOutbox>(e => { e.ToTable("job_outbox"); e.HasKey(m => m.Id); e.Property(m => m.Id).ValueGeneratedNever(); });
         modelBuilder.Entity<Recording>(entity =>
         {
             entity.ToTable("recordings");

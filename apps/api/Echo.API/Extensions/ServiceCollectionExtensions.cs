@@ -1,3 +1,4 @@
+using Echo.API.Features.Jobs;
 using Amazon;
 using Amazon.Runtime;
 using Amazon.S3;
@@ -13,6 +14,11 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddFileStorage(configuration);
+        services.AddOptions<RabbitOptions>().Bind(configuration.GetSection("RabbitMQ"))
+            .Validate(o => Uri.TryCreate(o.Url, UriKind.Absolute, out var uri) && uri.Scheme is "amqp" or "amqps", "RabbitMQ URL must be amqp(s).")
+            .Validate(o => o.PollIntervalMs > 0 && !string.IsNullOrWhiteSpace(o.JobQueue) && !string.IsNullOrWhiteSpace(o.ResultQueue) && o.JobQueue != o.ResultQueue, "Invalid RabbitMQ queues or poll interval.")
+            .ValidateOnStart();
+        services.AddHostedService<RabbitJobService>();
         
         services.AddDbContext<EchoDbContext>(options =>
         {
@@ -54,6 +60,12 @@ public static class ServiceCollectionExtensions
                 ResponseChecksumValidation = ResponseChecksumValidation.WHEN_REQUIRED,
             };
 
+            if (!string.IsNullOrWhiteSpace(options.Endpoint))
+            {
+                s3Config.ServiceURL = options.Endpoint;
+                s3Config.AuthenticationRegion = options.Region;
+            }
+            s3Config.ForcePathStyle = options.ForcePathStyle;
             return new AmazonS3Client(s3Config);
         });
 

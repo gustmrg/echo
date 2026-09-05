@@ -272,6 +272,27 @@ namespace Echo.API.Database.Migrations
                     b.ToTable("transcription_jobs", (string)null);
                 });
 
+            modelBuilder.Entity("Echo.API.Features.Jobs.JobOutbox", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("payload");
+
+                    b.HasKey("Id")
+                        .HasName("pk_job_outbox");
+
+                    b.ToTable("job_outbox", (string)null);
+                });
+
             modelBuilder.Entity("Echo.API.Entities.RefinementJob", b =>
                 {
                     b.HasOne("Echo.API.Entities.Recording", "Recording")

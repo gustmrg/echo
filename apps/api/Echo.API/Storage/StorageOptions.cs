@@ -16,6 +16,8 @@ public sealed class LocalStorageOptions
 
 public sealed class S3StorageOptions
 {
+    public string? Endpoint { get; set; }
+    public bool ForcePathStyle { get; set; }
     public string BucketName { get; set; } = string.Empty;
     public string Region { get; set; } = "us-east-1";
 }
