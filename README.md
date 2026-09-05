@@ -22,23 +22,23 @@ review, and publishing-ready outputs.
 
 ## Architecture
 
-Echo currently runs as an API service and a TypeScript background worker. They
-share SQLite persistence and file storage. Local development stores audio on
-the shared Docker volume; production uses AWS S3.
+The API is the only service with access to SQLite. A TypeScript worker consumes
+RabbitMQ messages and returns results through a separate queue. Development uses
+SeaweedFS S3; production uses AWS S3.
 
 ```text
-apps/api/       .NET Minimal API for recording ingestion and metadata
-apps/worker-ts/ TypeScript worker for polled transcription jobs
-SQLite          shared database for recordings and transcription jobs
-Local/S3        audio storage selected by environment
+API + SQLite/outbox → RabbitMQ jobs → TypeScript worker + S3 + AI
+API + SQLite        ← RabbitMQ results ← worker
 ```
 
-The API creates a recording and transcription job in one database transaction.
-The worker polls SQLite, reads the audio, calls OpenRouter or OpenAI, and
-atomically stores the transcript. Transcript edits use optimistic revision checks.
-Refinement jobs snapshot the saved transcript and persist Markdown outputs for
-Blog, Interview, Notes, and News. Both job types use leases, claim tokens,
-deadlines, and at most three attempts with backoff.
+Uploads commit recording/job rows atomically. The API dispatcher creates durable
+outbox messages and publishes with confirms. It also consumes results, updating
+recordings and refinements idempotently using claim tokens. The worker downloads
+audio to a temporary file, processes it, publishes a confirmed result, and acks.
+Transient failures requeue; the API bounds automatic retries. Transcript edits and
+refinement source revisions retain their existing optimistic concurrency semantics.
+
+See [job queue protocol and upgrade procedure](docs/JOB-QUEUE.md).
 
 ## Run with Docker Compose
 
@@ -62,15 +62,18 @@ Start the local stack:
 docker compose up --build
 ```
 
-The Compose stack starts:
+The Compose stack starts the API on `http://localhost:8080`, the worker,
+RabbitMQ (AMQP `localhost:5672`, management `http://localhost:15672`), and
+SeaweedFS (`http://localhost:8333`). The API alone mounts `appdata` for SQLite.
+RabbitMQ and SeaweedFS have separate durable volumes.
 
-- `api`: .NET API on `http://localhost:8080`
-- `worker`: TypeScript background worker for transcription jobs
+Local broker credentials are `echo` / `echo-dev-only`; S3 credentials are
+`echo-dev` / `echo-dev-secret`, with bucket `echo` by default. These examples
+are for local development. Replace broker credentials/URL for production.
 
-The API and worker share the SQLite database and locally uploaded audio through
-the `appdata` Docker volume. Production Compose configuration switches both
-services to AWS S3.
-
+Production uses `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`.
+This excludes the development override and SeaweedFS; configure the real S3 bucket
+and AWS credentials/role. The API should be exposed through your private reverse proxy.
 
 Useful commands:
 
@@ -81,7 +84,7 @@ docker compose down -v
 ```
 
 Use `docker compose down -v` only when you want to remove the SQLite database
-and locally uploaded audio.
+and the RabbitMQ/S3 data volumes.
 
 ## Run the web app
 
@@ -93,8 +96,7 @@ Use Node 24+, pnpm 10.34.5, and .NET 10. From `apps/web`, run
 The worker uses the transcription provider's credentials for refinement.
 `REFINEMENT_MODEL` optionally overrides the default (`openai/gpt-4.1-mini` on
 OpenRouter, `gpt-4.1-mini` on OpenAI). `REFINEMENT_BASE_URL` overrides the chat
-endpoint base for compatible providers. `JOB_TIMEOUT_MS` defaults to 120 seconds
-(or half the lease if shorter) and must be less than `PROCESSING_LEASE_MS`.
+endpoint base for compatible providers. `JOB_TIMEOUT_MS` defaults to 120 seconds. RabbitMQ manages redelivery after worker interruption.
 
 Stopped audio is retained in the current page until uploaded or discarded; use
 Download audio before closing the page. Upload retries reuse a UUID key, and the
@@ -123,11 +125,13 @@ pnpm --dir apps/web exec playwright install chromium
 pnpm --dir apps/web test:e2e
 ```
 
-Worker integration tests use the actual EF migration set. The browser test starts
-an isolated temporary database, local storage, API, worker, and provider stub on
-ports 5190–5193. It checks lost upload responses, deduplication, immediate-save
-navigation, cross-browser persistence, refinement, revision invalidation, and
-deletion. It requires no provider credentials or paid calls.
+Start test infrastructure with `docker compose -p echo-tests up -d --wait rabbitmq seaweedfs`
+before the browser tests. The test harness creates unique queues, a temporary API
+database and a unique S3 bucket, then removes them at shutdown. It runs the real API,
+RabbitMQ worker and S3 adapters with a local AI provider stub (no paid calls).
+It checks upload recovery, durable editing, refinement, bounded retries and deletion.
+Stop test infrastructure afterward with `docker compose -p echo-tests down`.
+API tests verify migrations, outbox durability, duplicate/stale results and retry bounds.
 
 Authentication and ownership, production web hosting, and pagination remain
 outside this milestone. Keep the deployment private until access control exists.

@@ -31,8 +31,13 @@ jobs:
         working-directory: apps/web
       - run: pnpm exec playwright install --with-deps chromium
         working-directory: apps/web
+      - run: docker compose -p echo-ci up -d --wait rabbitmq seaweedfs
+      - run: ECHO_TEST_DOCKER_PROJECT=echo-ci pnpm test:integration
+        working-directory: apps/worker-ts
       - run: pnpm test:e2e
         working-directory: apps/web
+      - run: docker compose -p echo-ci down -v
+        if: always()
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

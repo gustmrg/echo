@@ -1,8 +1,41 @@
 services:
   api:
-    ports:
-      - "8080:8080"
+    ports: ["127.0.0.1:8080:8080"]
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-    volumes:
-      - ./apps/api:/src
+      Storage__S3__Endpoint: http://seaweedfs:8333
+      Storage__S3__ForcePathStyle: "true"
+      AWS_ACCESS_KEY_ID: echo-dev
+      AWS_SECRET_ACCESS_KEY: echo-dev-secret
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+  worker:
+    environment:
+      NODE_ENV: development
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_FORCE_PATH_STYLE: "true"
+      AWS_ACCESS_KEY_ID: echo-dev
+      AWS_SECRET_ACCESS_KEY: echo-dev-secret
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+  rabbitmq:
+    ports: ["127.0.0.1:5672:5672", "127.0.0.1:15672:15672"]
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.45
+    command: [mini, -dir=/data]
+    environment:
+      AWS_ACCESS_KEY_ID: echo-dev
+      AWS_SECRET_ACCESS_KEY: echo-dev-secret
+      S3_BUCKET: "${S3_BUCKET:-echo}"
+    ports: ["127.0.0.1:8333:8333"]
+    volumes: [s3data:/data]
+    healthcheck:
+      test: [CMD-SHELL, 'wget -q -O /dev/null http://localhost:9333/cluster/status']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [echo-network]
+volumes:
+  s3data:

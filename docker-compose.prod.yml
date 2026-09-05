@@ -4,21 +4,15 @@ services:
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      Storage__Provider: S3
-      Storage__S3__BucketName: "${S3_BUCKET:-}"
-      Storage__S3__Region: "${AWS_REGION:-us-east-1}"
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
       AWS_SESSION_TOKEN: "${AWS_SESSION_TOKEN:-}"
-
   worker:
     image: ${ECHO_WORKER_IMAGE:-gustmrg/echo-worker:latest}
     restart: unless-stopped
     environment:
-      NODE_ENV: Production
-      STORAGE_PROVIDER: s3
-      S3_BUCKET: "${S3_BUCKET:-}"
-      AWS_REGION: "${AWS_REGION:-us-east-1}"
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
       AWS_SESSION_TOKEN: "${AWS_SESSION_TOKEN:-}"
+  rabbitmq:
+    restart: unless-stopped

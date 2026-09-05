@@ -18,27 +18,32 @@ Each feature lives under `Features/<FeatureName>/` with its own endpoint registr
 
 ### File Storage
 - `IFileStorage` abstracts upload/download/delete operations.
-- Local development uses the filesystem; production uses AWS S3.
+- Local development uses SeaweedFS via S3; production uses AWS S3.
 - File keys are structured by context and identifier (e.g., `recordings/<id>/<filename>`).
 
 ## Back-End Patterns (Worker — TypeScript / Node.js)
 
-### Poll-Based Job Processing
-- The worker runs a continuous loop that polls SQLite for pending `TranscriptionJob` rows.
-- Graceful shutdown uses an `AbortSignal` triggered by SIGINT/SIGTERM.
-- On each iteration: atomically claim the next job → open audio from local/S3 storage → transcribe → atomically update job and recording status.
-- Interrupted processing jobs remain leased and are reclaimed after `PROCESSING_LEASE_MS`.
+### RabbitMQ Job Processing
+- Only the API accesses SQLite. The worker has no database dependency or database volume.
+- The API commits jobs, then atomically prepares an outbox message and claim token.
+- The API publishes persistent jobs with publisher confirms and consumes results idempotently.
+- The worker consumes messages with prefetch 1, downloads S3 audio to a temporary file, processes it, publishes a confirmed result, then acknowledges the input.
+- Transient failures receive one delayed nack/requeue per delivery, then a failed result. The API permits up to three job attempts with backoff.
+- SIGINT/SIGTERM abort processing and close the connection; RabbitMQ redelivers unacknowledged work.
+- Refinement messages carry the source snapshot and format; they follow the same transport.
 
 ### Source Layout
-- `src/config` — validates environment variables into a typed configuration.
-- `src/db` — raw SQL through Node's built-in SQLite client.
-- `src/storage` — local filesystem and AWS S3 streaming readers.
+- `src/config` — validates environment variables into typed configuration.
+- `src/messaging` — message contracts, RabbitMQ consumption, reconnect, and acknowledgements.
+- `src/storage` — S3 and optional local filesystem streaming readers.
 - `src/transcription` — OpenRouter and OpenAI provider adapters.
-- `src/worker.ts` — polling and per-job orchestration.
+- `src/worker.ts` — temporary audio download and per-job processing.
+- `src/refinement` — chat provider adapter and prompts.
 
-### Shared Infrastructure
-- Both API and worker share the SQLite database and selected file storage.
-- Docker Compose mounts `appdata` for the database and local audio files.
+### Infrastructure
+- Development uses SeaweedFS S3, production uses AWS S3.
+- RabbitMQ has a dedicated durable volume; SQLite is mounted only in the API (and its volume-init helper).
+- Stop old SQLite workers before migrating to RabbitMQ; migrate existing local audio preserving storage keys.
 
 ## Commits
 
