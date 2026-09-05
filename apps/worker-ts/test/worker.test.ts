@@ -13,6 +13,25 @@ const job = createJob()
 const recording = createRecording()
 
 describe('processJob', () => {
+  it('times out a stalled provider and schedules a retry without treating it as shutdown', async () => {
+    let retryable: boolean | undefined
+    let reason: string | undefined
+    const store = createStore({
+      getRecording: async () => recording,
+      failJob: async (_job, message, _signal, retry) => { reason = message; retryable = retry },
+    })
+    const keepAlive = setTimeout(() => {}, 1000)
+    try {
+      await processJob(job, store, { openReadStream: async () => Readable.from(['audio']) }, {
+        transcribe: async (_audio, _metadata, signal) => new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        }),
+      }, createTestLogger().logger, abortSignal, 10)
+      assert.match(reason ?? '', /timed out/)
+      assert.equal(retryable, true)
+    } finally { clearTimeout(keepAlive) }
+  })
+
   it('loads, transcribes, and atomically completes a claimed job', async () => {
     let requestedStorageKey: string | undefined
     let receivedMetadata: AudioMetadata | undefined
@@ -83,7 +102,7 @@ describe('processJob', () => {
     await processJob(job, store, storage, transcriber, createTestLogger().logger, abortSignal)
 
     assert.equal(audio.destroyed, true)
-    assert.equal(failureReason, providerError.message)
+    assert.equal(failureReason, 'Transcription could not be completed. Check the provider configuration or retry.')
   })
 
   it('logs a failure-state persistence error without crashing the worker', async () => {
@@ -247,6 +266,8 @@ function createJob(): TranscriptionJob {
     status: 'processing',
     createdAt: new Date('2026-08-29T20:00:00.000Z'),
     updatedAt: new Date('2026-08-29T20:00:00.000Z'),
+    claimToken: "claim-token",
+    attemptCount: 1,
     retryCount: 0,
     failureReason: null,
   }

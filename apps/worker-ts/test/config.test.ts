@@ -14,6 +14,8 @@ describe('loadConfig', () => {
     })
 
     assert.deepEqual(config, {
+      jobTimeoutMs: 120_000,
+      refinement: { provider: 'openrouter', apiKey: 'secret', baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4.1-mini' },
       environment: 'test',
       database: { path: '/data/echo.db' },
       polling: {
@@ -88,4 +90,11 @@ describe('loadConfig', () => {
         error.message === 'POLL_INTERVAL_MS must be a positive integer',
     )
   })
+})
+
+
+it('requires a deadline shorter than the lease', () => {
+  assert.throws(() => loadConfig({ DB_PATH: '/tmp/test.db', STORAGE_LOCAL_ROOT: '/tmp/files',
+    OPENROUTER_API_KEY: 'test', PROCESSING_LEASE_MS: '1000', JOB_TIMEOUT_MS: '1000' }),
+    /must be shorter/)
 })

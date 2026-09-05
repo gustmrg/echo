@@ -2,7 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import type { Store, TranscriptionJob } from './db/store.js'
 import type { Logger } from './logging/logger.js'
 import type { FileStorage } from './storage/file-storage.js'
-import type { Transcriber } from './transcription/transcriber.js'
+import { UnsupportedAudioFormatError, type Transcriber } from './transcription/transcriber.js'
 
 export type WaitForPoll = (milliseconds: number, signal: AbortSignal) => Promise<void>
 
@@ -12,6 +12,7 @@ export interface WorkerOptions {
   transcriber: Transcriber
   logger: Logger
   pollIntervalMs: number
+  jobTimeoutMs?: number
   waitForPoll?: WaitForPoll
 }
 
@@ -21,6 +22,7 @@ export class Worker {
   readonly #transcriber: Transcriber
   readonly #logger: Logger
   readonly #pollIntervalMs: number
+  readonly #jobTimeoutMs: number
   readonly #waitForPoll: WaitForPoll
 
   constructor(options: WorkerOptions) {
@@ -28,6 +30,7 @@ export class Worker {
       throw new TypeError('pollIntervalMs must be a positive integer')
     }
 
+    this.#jobTimeoutMs = options.jobTimeoutMs ?? 120_000
     this.#store = options.store
     this.#storage = options.storage
     this.#transcriber = options.transcriber
@@ -69,6 +72,7 @@ export class Worker {
         this.#transcriber,
         this.#logger,
         signal,
+        this.#jobTimeoutMs,
       )
     }
 
@@ -95,12 +99,14 @@ export async function processJob(
   transcriber: Transcriber,
   logger: Logger,
   signal: AbortSignal,
+  jobTimeoutMs = 120_000,
 ): Promise<void> {
+  const jobSignal = AbortSignal.any([signal, AbortSignal.timeout(jobTimeoutMs)])
   const jobLogger = logger.child({ jobId: job.id, recordingId: job.recordingId })
   jobLogger.info('Processing transcription job')
 
   try {
-    const recording = await store.getRecording(job.recordingId, signal)
+    const recording = await store.getRecording(job.recordingId, jobSignal)
     if (recording === null) {
       throw new JobProcessingError('Recording was not found')
     }
@@ -108,19 +114,19 @@ export async function processJob(
       throw new JobProcessingError('Recording has no storage key')
     }
 
-    const audio = await storage.openReadStream(recording.storageKey, signal)
+    const audio = await storage.openReadStream(recording.storageKey, jobSignal)
     let transcript: string
     try {
       transcript = await transcriber.transcribe(
         audio,
         { fileName: recording.fileName, contentType: recording.contentType },
-        signal,
+        jobSignal,
       )
     } finally {
       audio.destroy()
     }
 
-    await store.completeJob(job, transcript, signal)
+    await store.completeJob(job, transcript, jobSignal)
     jobLogger.info('Transcription job completed')
   } catch (error) {
     if (signal.aborted) {
@@ -130,7 +136,8 @@ export async function processJob(
 
     jobLogger.error('Transcription job failed', error)
     try {
-      await store.failJob(job, describeFailure(error), signal)
+      await store.failJob(job, describeFailure(error, jobSignal), signal,
+        !(error instanceof UnsupportedAudioFormatError || error instanceof JobProcessingError))
     } catch (failureUpdateError) {
       jobLogger.error('Could not persist transcription job failure', failureUpdateError)
     }
@@ -141,8 +148,11 @@ async function waitForPoll(milliseconds: number, signal: AbortSignal): Promise<v
   await delay(milliseconds, undefined, { signal })
 }
 
-function describeFailure(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+function describeFailure(error: unknown, signal: AbortSignal): string {
+  if (signal.aborted) return 'Transcription timed out. Please retry.'
+  if (error instanceof UnsupportedAudioFormatError) return 'This audio format is not supported by the transcription provider.'
+  if (error instanceof JobProcessingError) return error.message
+  return 'Transcription could not be completed. Check the provider configuration or retry.'
 }
 
 class JobProcessingError extends Error {

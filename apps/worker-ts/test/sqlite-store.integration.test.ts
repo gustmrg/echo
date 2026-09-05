@@ -1,3 +1,4 @@
+import { RefinementStore } from '../src/refinement/store.js'
 import assert from 'node:assert/strict'
 import { copyFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -218,6 +219,84 @@ describe('SqliteStore', () => {
     assert.equal(readStatus(databasePath, 'transcription_jobs', ids.jobId), 'processing')
     assert.equal(readTranscript(databasePath, ids.recordingId), null)
   })
+  it('rejects completion and failure by a worker whose lease has been reclaimed', async () => {
+    const path = createMigratedDatabase()
+    insertRecordingAndJob(path)
+    let now = fixedNow
+    const first = new SqliteStore(path, { processingLeaseMs, now: () => now })
+    const second = new SqliteStore(path, { processingLeaseMs, now: () => now })
+    try {
+      const stale = await first.claimNextJob(abortSignal)
+      assert.ok(stale)
+      now = new Date(now.getTime() + processingLeaseMs + 1)
+      const fresh = await second.claimNextJob(abortSignal)
+      assert.ok(fresh)
+      assert.notEqual(fresh.claimToken, stale.claimToken)
+      await assert.rejects(first.completeJob(stale, 'stale', abortSignal), StoreStateConflictError)
+      await assert.rejects(first.failJob(stale, 'stale error', abortSignal, true), StoreStateConflictError)
+      await second.completeJob(fresh, 'fresh', abortSignal)
+      assert.equal(readTranscript(path, fresh.recordingId), 'fresh')
+    } finally { await first.close(); await second.close() }
+  })
+
+  it('backs off transient failures and stops after three attempts', async () => {
+    const path = createMigratedDatabase()
+    const ids = insertRecordingAndJob(path)
+    let now = fixedNow
+    const store = new SqliteStore(path, { processingLeaseMs, retryDelayMs: 100, now: () => now })
+    try {
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const job = await store.claimNextJob(abortSignal)
+        assert.ok(job)
+        assert.equal(job.attemptCount, attempt)
+        await store.failJob(job, 'temporary', abortSignal, true)
+        assert.equal(await store.claimNextJob(abortSignal), null)
+        now = new Date(now.getTime() + 1000)
+      }
+      assert.equal(await store.claimNextJob(abortSignal), null)
+      assert.equal(readStatus(path, 'recordings', ids.recordingId), 'failed')
+    } finally { await store.close() }
+  })
+
+  it('terminates an expired final attempt after repeated worker interruptions', async () => {
+    const path = createMigratedDatabase()
+    const ids = insertRecordingAndJob(path)
+    let now = fixedNow
+    const store = new SqliteStore(path, { processingLeaseMs, now: () => now })
+    try {
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        assert.ok(await store.claimNextJob(abortSignal))
+        now = new Date(now.getTime() + processingLeaseMs + 1)
+      }
+      assert.equal(await store.claimNextJob(abortSignal), null)
+      assert.equal(readStatus(path, 'recordings', ids.recordingId), 'failed')
+    } finally { await store.close() }
+  })
+
+  it('persists refinement output and fences stale claims on the migrated schema', () => {
+    const path = createMigratedDatabase()
+    const ids = insertRecordingAndJob(path)
+    const db = new DatabaseSync(path)
+    const id = randomUUID()
+    db.prepare(`INSERT INTO refinement_jobs (id, recording_id, request_key, format, transcript_revision,
+      source_text, status, attempt_count, created_at) VALUES (?, ?, ?, 'notes', 1, 'reviewed', 'created', 0, ?)`)
+      .run(id, ids.recordingId, randomUUID(), fixedNow.toISOString())
+    let now = fixedNow
+    const store = new RefinementStore(path, processingLeaseMs, () => now)
+    try {
+      const stale = store.claim()
+      assert.ok(stale)
+      now = new Date(now.getTime() + processingLeaseMs + 1)
+      const fresh = store.claim()
+      assert.ok(fresh)
+      const result = { content: '# Notes', model: 'test', provider: 'test', promptVersion: '1' }
+      assert.equal(store.complete(stale, result), false)
+      assert.equal(store.fail(stale, 'stale'), false)
+      assert.equal(store.complete(fresh, result), true)
+      assert.equal(db.prepare('SELECT content FROM refinement_jobs WHERE id = ?').get(id)?.content, '# Notes')
+    } finally { store.close(); db.close() }
+  })
+
 })
 
 interface SeedOptions {

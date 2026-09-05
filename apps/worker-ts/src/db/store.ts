@@ -19,6 +19,8 @@ export interface TranscriptionJob {
   status: JobStatus
   createdAt: Date
   updatedAt: Date | null
+  claimToken: string | null
+  attemptCount: number
   retryCount: number
   failureReason: string | null
 }
@@ -27,7 +29,7 @@ export interface Store {
   claimNextJob(signal: AbortSignal): Promise<TranscriptionJob | null>
   getRecording(id: string, signal: AbortSignal): Promise<Recording | null>
   completeJob(job: TranscriptionJob, transcript: string, signal: AbortSignal): Promise<void>
-  failJob(job: TranscriptionJob, reason: string, signal: AbortSignal): Promise<void>
+  failJob(job: TranscriptionJob, reason: string, signal: AbortSignal, retryable?: boolean): Promise<void>
   close(): Promise<void>
 }
 

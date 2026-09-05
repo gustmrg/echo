@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { DatabaseSync, type StatementResultingChanges } from 'node:sqlite'
 import {
   StoreStateConflictError,
@@ -22,6 +23,8 @@ const jobStatuses = new Set<JobStatus>(['created', 'processing', 'completed', 'f
 export interface SqliteStoreOptions {
   processingLeaseMs: number
   busyTimeoutMs?: number
+  maxAttempts?: number
+  retryDelayMs?: number
   now?: () => Date
 }
 
@@ -29,6 +32,8 @@ export class SqliteStore implements Store {
   readonly #database: DatabaseSync
   readonly #processingLeaseMs: number
   readonly #now: () => Date
+  readonly #maxAttempts: number
+  readonly #retryDelayMs: number
 
   constructor(databasePath: string, options: SqliteStoreOptions) {
     if (!databasePath.trim()) {
@@ -38,6 +43,8 @@ export class SqliteStore implements Store {
       throw new TypeError('processingLeaseMs must be a positive integer')
     }
 
+    this.#maxAttempts = options.maxAttempts ?? 3
+    this.#retryDelayMs = options.retryDelayMs ?? 5_000
     this.#processingLeaseMs = options.processingLeaseMs
     this.#now = options.now ?? (() => new Date())
     this.#database = new DatabaseSync(databasePath, {
@@ -53,12 +60,25 @@ export class SqliteStore implements Store {
     return this.#transaction(() => {
       const now = this.#now()
       const leaseCutoff = new Date(now.getTime() - this.#processingLeaseMs)
+      // Expired final attempts terminate instead of being reclaimed forever.
+      const exhausted = this.#database.prepare(`
+        SELECT id, recording_id FROM transcription_jobs
+        WHERE status = 'processing' AND attempt_count >= ? AND julianday(updated_at) <= julianday(?)
+      `).all(this.#maxAttempts, leaseCutoff.toISOString())
+      for (const row of exhausted) {
+        this.#database.prepare(`UPDATE transcription_jobs SET status = 'failed', claim_token = NULL,
+          failure_reason = 'Processing was interrupted too many times. Retry the transcription.', updated_at = ? WHERE id = ?`)
+          .run(now.toISOString(), readString(row, 'id'))
+        this.#database.prepare(`UPDATE recordings SET status = 'failed', updated_at = ? WHERE id = ? AND status = 'transcribing'`)
+          .run(now.toISOString(), readString(row, 'recording_id'))
+      }
       const candidate = this.#database.prepare(`
         SELECT j.id
         FROM transcription_jobs AS j
         INNER JOIN recordings AS r ON r.id = j.recording_id
         WHERE
-          (j.status = 'created' AND r.status = 'pending')
+          (j.status = 'created' AND r.status = 'pending' AND
+            (j.next_attempt_at IS NULL OR julianday(j.next_attempt_at) <= julianday(?)))
           OR (
             j.status = 'processing'
             AND r.status = 'transcribing'
@@ -66,7 +86,7 @@ export class SqliteStore implements Store {
           )
         ORDER BY j.created_at ASC, j.id ASC
         LIMIT 1
-      `).get(leaseCutoff.toISOString())
+      `).get(now.toISOString(), leaseCutoff.toISOString())
 
       if (candidate === undefined) {
         return null
@@ -77,9 +97,10 @@ export class SqliteStore implements Store {
       const updatedAt = now.toISOString()
       const jobUpdate = this.#database.prepare(`
         UPDATE transcription_jobs
-        SET status = 'processing', updated_at = ?, failure_reason = NULL
+        SET status = 'processing', updated_at = ?, failure_reason = NULL,
+            claim_token = ?, attempt_count = attempt_count + 1, next_attempt_at = NULL
         WHERE id = ?
-      `).run(updatedAt, jobId)
+      `).run(updatedAt, randomUUID(), jobId)
       requireOneChange(jobUpdate, `Could not claim transcription job ${jobId}`)
 
       const recordingUpdate = this.#database.prepare(`
@@ -125,15 +146,16 @@ export class SqliteStore implements Store {
       const updatedAt = this.#now().toISOString()
       const jobUpdate = this.#database.prepare(`
         UPDATE transcription_jobs
-        SET status = 'completed', updated_at = ?, failure_reason = NULL
-        WHERE id = ? AND recording_id = ? AND status = 'processing'
-      `).run(updatedAt, job.id, job.recordingId)
+        SET status = 'completed', updated_at = ?, failure_reason = NULL, claim_token = NULL
+        WHERE id = ? AND recording_id = ? AND status = 'processing' AND claim_token = ?
+      `).run(updatedAt, job.id, job.recordingId, job.claimToken)
       requireOneChange(jobUpdate, `Transcription job ${job.id} is no longer processing`)
 
       signal.throwIfAborted()
       const recordingUpdate = this.#database.prepare(`
         UPDATE recordings
-        SET status = 'transcribed', transcribed_text = ?, updated_at = ?
+        SET status = 'transcribed', transcribed_text = ?, edited_text = NULL,
+            transcript_revision = transcript_revision + 1, updated_at = ?
         WHERE id = ? AND status = 'transcribing'
       `).run(transcript, updatedAt, job.recordingId)
       requireOneChange(
@@ -147,30 +169,33 @@ export class SqliteStore implements Store {
     job: TranscriptionJob,
     reason: string,
     signal: AbortSignal,
+    retryable = false,
   ): Promise<void> {
     signal.throwIfAborted()
 
     this.#transaction(() => {
       const updatedAt = this.#now().toISOString()
+      const retry = retryable && job.attemptCount < this.#maxAttempts
+      const nextAttempt = new Date(this.#now().getTime() + this.#retryDelayMs * 2 ** (job.attemptCount - 1)).toISOString()
       const boundedReason = reason.trim().slice(0, MAX_FAILURE_REASON_LENGTH) ||
         'Unknown transcription failure'
       const jobUpdate = this.#database.prepare(`
         UPDATE transcription_jobs
         SET
-          status = 'failed',
+          status = ?, claim_token = NULL, next_attempt_at = ?,
           failure_reason = ?,
           retry_count = retry_count + 1,
           updated_at = ?
-        WHERE id = ? AND recording_id = ? AND status = 'processing'
-      `).run(boundedReason, updatedAt, job.id, job.recordingId)
+        WHERE id = ? AND recording_id = ? AND status = 'processing' AND claim_token = ?
+      `).run(retry ? 'created' : 'failed', retry ? nextAttempt : null, boundedReason, updatedAt, job.id, job.recordingId, job.claimToken)
       requireOneChange(jobUpdate, `Transcription job ${job.id} is no longer processing`)
 
       signal.throwIfAborted()
       const recordingUpdate = this.#database.prepare(`
         UPDATE recordings
-        SET status = 'failed', updated_at = ?
+        SET status = ?, updated_at = ?
         WHERE id = ? AND status = 'transcribing'
-      `).run(updatedAt, job.recordingId)
+      `).run(retry ? 'pending' : 'failed', updatedAt, job.recordingId)
       requireOneChange(
         recordingUpdate,
         `Recording ${job.recordingId} is no longer transcribing`,
@@ -192,6 +217,8 @@ export class SqliteStore implements Store {
         status,
         created_at AS createdAt,
         updated_at AS updatedAt,
+        claim_token AS claimToken,
+        attempt_count AS attemptCount,
         retry_count AS retryCount,
         failure_reason AS failureReason
       FROM transcription_jobs
@@ -247,6 +274,8 @@ function mapJob(row: Record<string, unknown>): TranscriptionJob {
     status: readJobStatus(row, 'status'),
     createdAt: readDate(row, 'createdAt'),
     updatedAt: readNullableDate(row, 'updatedAt'),
+    claimToken: readNullableString(row, 'claimToken'),
+    attemptCount: readNumber(row, 'attemptCount'),
     retryCount: readNumber(row, 'retryCount'),
     failureReason: readNullableString(row, 'failureReason'),
   }

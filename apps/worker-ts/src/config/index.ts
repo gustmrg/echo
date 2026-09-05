@@ -1,3 +1,4 @@
+import type { RefinementConfig } from '../refinement/refiner.js'
 export type RuntimeEnvironment = 'development' | 'test' | 'production'
 export type TranscriptionProvider = 'openrouter' | 'openai'
 
@@ -39,6 +40,8 @@ export interface WorkerConfig {
     intervalMs: number
     processingLeaseMs: number
   }
+  jobTimeoutMs: number
+  refinement: RefinementConfig
   storage: StorageConfig
   transcription: TranscriptionConfig
 }
@@ -48,7 +51,18 @@ export class ConfigurationError extends Error {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
+  const transcription = readTranscriptionConfig(env)
+  const leaseMs = readPositiveInteger(env, 'PROCESSING_LEASE_MS', 15 * 60_000)
+  const jobTimeoutMs = readPositiveInteger(env, 'JOB_TIMEOUT_MS', Math.min(120_000, Math.floor(leaseMs / 2)))
+  if (jobTimeoutMs >= leaseMs) throw new ConfigurationError('JOB_TIMEOUT_MS must be shorter than PROCESSING_LEASE_MS')
   return {
+    jobTimeoutMs,
+    refinement: {
+      provider: transcription.provider,
+      apiKey: transcription.apiKey,
+      baseUrl: readOptional(env.REFINEMENT_BASE_URL, transcription.provider === 'openrouter' ? transcription.baseUrl : 'https://api.openai.com/v1'),
+      model: readOptional(env.REFINEMENT_MODEL, transcription.provider === 'openrouter' ? 'openai/gpt-4.1-mini' : 'gpt-4.1-mini'),
+    },
     environment: readEnvironment(env.NODE_ENV),
     database: {
       path: readRequired(env, 'DB_PATH'),
@@ -58,7 +72,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
       processingLeaseMs: readPositiveInteger(env, 'PROCESSING_LEASE_MS', 15 * 60_000),
     },
     storage: readStorageConfig(env),
-    transcription: readTranscriptionConfig(env),
+    transcription,
   }
 }
 
