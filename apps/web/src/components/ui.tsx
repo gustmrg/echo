@@ -8,24 +8,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
 }
 
-const variantClasses: Record<ButtonVariant, string> = {
-  primary:
-    'bg-accent text-white font-semibold shadow-[0_4px_20px_rgba(232,87,58,0.3)] hover:bg-[#f0653f] disabled:opacity-50',
-  secondary:
-    'bg-surface border border-border text-text-primary font-semibold hover:bg-surface-hover disabled:opacity-50',
-  ghost:
-    'text-text-secondary font-medium hover:text-text-primary disabled:opacity-40',
-  danger:
-    'bg-accent/10 border border-accent/30 text-accent font-semibold hover:bg-accent/20 disabled:opacity-50',
-}
-
 export function Button({ variant = 'primary', className = '', ...props }: ButtonProps) {
-  return (
-    <button
-      className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-md text-[15px] transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:active:scale-100 touch-manipulation ${variantClasses[variant]} ${className}`}
-      {...props}
-    />
-  )
+  return <button className={`echo-button ${variant} ${className}`} {...props} />
 }
 
 /* ---------- PageHeader ---------- */
@@ -42,6 +26,7 @@ export function PageHeader({ title, onBack, action }: PageHeaderProps) {
       <div className="w-20 flex justify-start">
         {onBack && (
           <button
+            aria-label="Back"
             onClick={onBack}
             className="flex items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors -ml-1"
           >

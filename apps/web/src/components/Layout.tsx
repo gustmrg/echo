@@ -1,68 +1,113 @@
-import { Link, Outlet } from '@tanstack/react-router'
-import BottomNav from './BottomNav'
-import { IconHome, IconMic, IconSettings } from './ui'
-
-const linkBase =
-  'flex items-center justify-center w-11 h-11 rounded-xl transition-colors'
+import { Link, Outlet, useRouterState } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
+import { recordingsQuery, newestFirst } from '../lib/recording-query'
+import Brand from './Brand'
+import { IconMic, IconHome, IconCopy, IconSettings } from './ui'
 
 export default function Layout() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
+  const { data } = useQuery(recordingsQuery)
+  const recent = newestFirst(data).slice(0, 3)
+  const current = data?.find((recording) => pathname.includes(recording.id))
+  const breadcrumb = current
+    ? (current.title ?? current.fileName)
+    : pathname === '/record'
+      ? 'New recording'
+      : pathname === '/outputs'
+        ? 'Saved outputs'
+        : pathname === '/settings'
+          ? 'About Echo'
+          : 'Recordings'
   return (
-    <div className="flex h-dvh bg-bg font-body text-text-primary overflow-hidden">
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col items-center w-[72px] flex-shrink-0 border-r border-border/60 py-5 gap-2">
-        <Link
-          to="/"
-          className="font-display text-[26px] leading-none text-accent mb-6 select-none"
-          aria-label="Echo home"
-        >
-          E
+    <div className="echo-app">
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
+      <aside className="workspace-sidebar">
+        <Link to="/" aria-label="Echo home">
+          <Brand />
         </Link>
-
-        <Link
-          to="/"
-          aria-label="Home"
-          title="Home"
-          className={linkBase}
-          activeOptions={{ exact: true }}
-          activeProps={{ className: `${linkBase} bg-surface-raised text-text-primary` }}
-          inactiveProps={{ className: `${linkBase} text-text-tertiary hover:text-text-secondary hover:bg-surface` }}
-        >
-          <IconHome />
+        <Link to="/record" className="echo-button primary">
+          <IconMic size={16} />
+          New recording
         </Link>
-
-        <Link
-          to="/record"
-          aria-label="New recording"
-          title="New recording"
-          className="flex items-center justify-center w-11 h-11 rounded-full bg-accent text-white shadow-[0_4px_20px_rgba(232,87,58,0.35)] hover:bg-[#f0653f] hover:scale-105 transition-all my-1"
-        >
-          <IconMic size={20} />
-        </Link>
-
-        <div className="flex-1" />
-
-        <Link
-          to="/settings"
-          aria-label="Settings"
-          title="Settings"
-          className={linkBase}
-          activeOptions={{ exact: true }}
-          activeProps={{ className: `${linkBase} bg-surface-raised text-text-primary` }}
-          inactiveProps={{ className: `${linkBase} text-text-tertiary hover:text-text-secondary hover:bg-surface` }}
-        >
-          <IconSettings />
-        </Link>
-      </aside>
-
-      {/* Content */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto h-full pb-24 md:pb-8">
-          <Outlet />
+        <nav className="workspace-nav" aria-label="Workspace">
+          <Link
+            to="/"
+            activeOptions={{ exact: true }}
+            activeProps={{ className: 'active' }}
+          >
+            <IconHome size={17} />
+            Recordings{data && <span className="nav-count">{data.length}</span>}
+          </Link>
+          <Link to="/outputs" activeProps={{ className: 'active' }}>
+            <IconCopy size={17} />
+            Saved outputs
+          </Link>
+          <Link to="/settings" activeProps={{ className: 'active' }}>
+            <IconSettings size={17} />
+            About Echo
+          </Link>
+        </nav>
+        {recent.length > 0 && (
+          <div className="recent-recordings">
+            <p className="eyebrow">Recent recordings</p>
+            {recent.map((r) => (
+              <Link
+                key={r.id}
+                to="/recordings/$recordingId"
+                params={{ recordingId: r.id }}
+              >
+                {r.title ?? r.fileName}
+              </Link>
+            ))}
+          </div>
+        )}
+        <div className="workspace-signature">
+          <span className="workspace-avatar" aria-hidden="true">
+            e
+          </span>
+          <div>
+            Your workspace<small>A place for your thoughts</small>
+          </div>
         </div>
-      </main>
-
-      {/* Mobile bottom nav */}
-      <BottomNav />
+      </aside>
+      <div className="workspace-main">
+        <header className="workspace-topbar">
+          <Link className="mobile-logo" to="/" aria-label="Echo home">
+            <Brand />
+          </Link>
+          <div className="workspace-breadcrumb">
+            <span>Workspace</span>
+            <span aria-hidden="true">›</span>
+            <span>{breadcrumb}</span>
+          </div>
+          <span className="workspace-tagline">Capture · Review · Refine</span>
+        </header>
+        <nav className="mobile-nav" aria-label="Mobile navigation">
+          <Link
+            to="/"
+            activeOptions={{ exact: true }}
+            activeProps={{ className: 'active' }}
+          >
+            Recordings
+          </Link>
+          <Link to="/record" activeProps={{ className: 'active' }}>
+            New recording
+          </Link>
+          <Link to="/outputs" activeProps={{ className: 'active' }}>
+            Outputs
+          </Link>
+          <Link to="/settings" activeProps={{ className: 'active' }}>
+            About
+          </Link>
+        </nav>
+        <main id="main-content">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

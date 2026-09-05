@@ -8,15 +8,15 @@ const pipeline = [
 
 export default function SettingsPage() {
   return (
-    <div className="flex flex-col h-full animate-fade-in-up">
-      <div className="px-5 md:px-8 pt-6 pb-5 flex-shrink-0">
+    <div className="studio-page">
+      <div className="document-heading">
         <h1 className="font-display text-[32px] leading-none tracking-[-0.02em] text-text-primary mb-1.5">
-          Settings
+          About Echo
         </h1>
         <p className="text-sm text-text-tertiary">About this build</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 md:px-8 pb-6">
+      <div className="about-section">
         <div className="bg-surface border border-border rounded-md p-5 mb-4">
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary mb-4">
             Pipeline status
@@ -29,12 +29,15 @@ export default function SettingsPage() {
                     live ? 'bg-success' : 'bg-warning'
                   }`}
                 />
-                <span className="text-text-secondary leading-relaxed">{stage}</span>
+                <span className="text-text-secondary leading-relaxed">
+                  {stage}
+                </span>
               </li>
             ))}
           </ul>
           <p className="text-[11px] text-text-tertiary mt-4 leading-relaxed">
-            Recordings, transcript edits, and generated outputs are saved on the server.
+            Recordings, transcript edits, and generated outputs are saved on the
+            server.
           </p>
         </div>
 
@@ -43,8 +46,9 @@ export default function SettingsPage() {
             About
           </h2>
           <p className="text-sm text-text-secondary leading-relaxed">
-            Echo turns spoken audio into polished, structured text. Record, transcribe, review, and
-            refine into a blog post, interview, notes, or news brief.
+            Echo turns spoken audio into polished, structured text. Record,
+            transcribe, review, and refine into a blog post, interview, notes,
+            or news brief.
           </p>
         </div>
       </div>

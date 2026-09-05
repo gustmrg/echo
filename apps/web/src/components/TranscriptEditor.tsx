@@ -149,7 +149,7 @@ export default function TranscriptEditor({ recordingId, original, editedText, re
         onChange={(e) => commit(e.target.value)}
         onKeyDown={handleKeyDown}
         spellCheck
-        className="w-full min-h-[280px] resize-none bg-surface border border-border rounded-md p-4 text-[15px] leading-[1.75] text-text-primary outline-none focus:border-text-tertiary transition-colors overflow-hidden"
+        className="transcript-editor"
       />
 
       {saveError && <div role="alert" className="text-sm text-accent mt-2">
@@ -157,7 +157,7 @@ export default function TranscriptEditor({ recordingId, original, editedText, re
         <button onClick={() => void flush().catch(() => {})} className="underline ml-2">Retry save</button>
       </div>}
       {/* Footer stats */}
-      <div className="flex items-center gap-3 mt-2 text-[11px] text-text-tertiary tabular-nums">
+      <div className="editor-stats">
         <span>{words.toLocaleString()} words</span>
         <span aria-hidden>·</span>
         <span>{text.length.toLocaleString()} characters</span>
