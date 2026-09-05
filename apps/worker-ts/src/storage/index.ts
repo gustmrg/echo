@@ -8,6 +8,6 @@ export function createFileStorage(config: StorageConfig): FileStorage {
     case 'local':
       return new LocalFileStorage(config.rootPath)
     case 's3':
-      return new S3FileStorage({ bucket: config.bucket, region: config.region })
+      return new S3FileStorage(config)
   }
 }

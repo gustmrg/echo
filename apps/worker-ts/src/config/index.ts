@@ -11,6 +11,8 @@ export interface S3StorageConfig {
   provider: 's3'
   bucket: string
   region: string
+  endpoint?: string
+  forcePathStyle?: boolean
 }
 
 export type StorageConfig = LocalStorageConfig | S3StorageConfig
@@ -33,13 +35,7 @@ export type TranscriptionConfig =
 
 export interface WorkerConfig {
   environment: RuntimeEnvironment
-  database: {
-    path: string
-  }
-  polling: {
-    intervalMs: number
-    processingLeaseMs: number
-  }
+  rabbit: { url: string; jobQueue: string; resultQueue: string; reconnectMs: number; retryMs: number }
   jobTimeoutMs: number
   refinement: RefinementConfig
   storage: StorageConfig
@@ -52,9 +48,12 @@ export class ConfigurationError extends Error {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
   const transcription = readTranscriptionConfig(env)
-  const leaseMs = readPositiveInteger(env, 'PROCESSING_LEASE_MS', 15 * 60_000)
-  const jobTimeoutMs = readPositiveInteger(env, 'JOB_TIMEOUT_MS', Math.min(120_000, Math.floor(leaseMs / 2)))
-  if (jobTimeoutMs >= leaseMs) throw new ConfigurationError('JOB_TIMEOUT_MS must be shorter than PROCESSING_LEASE_MS')
+  const jobTimeoutMs = readPositiveInteger(env, 'JOB_TIMEOUT_MS', 120_000)
+  const url = readRequired(env, 'RABBITMQ_URL')
+  if (!/^amqps?:\/\//.test(url)) throw new ConfigurationError('RABBITMQ_URL must use amqp or amqps')
+  const jobQueue = readOptional(env.RABBITMQ_JOB_QUEUE, 'echo.jobs')
+  const resultQueue = readOptional(env.RABBITMQ_RESULT_QUEUE, 'echo.results')
+  if (jobQueue === resultQueue) throw new ConfigurationError('RabbitMQ queues must differ')
   return {
     jobTimeoutMs,
     refinement: {
@@ -64,13 +63,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
       model: readOptional(env.REFINEMENT_MODEL, transcription.provider === 'openrouter' ? 'openai/gpt-4.1-mini' : 'gpt-4.1-mini'),
     },
     environment: readEnvironment(env.NODE_ENV),
-    database: {
-      path: readRequired(env, 'DB_PATH'),
-    },
-    polling: {
-      intervalMs: readPositiveInteger(env, 'POLL_INTERVAL_MS', 5_000),
-      processingLeaseMs: readPositiveInteger(env, 'PROCESSING_LEASE_MS', 15 * 60_000),
-    },
+    rabbit: { url, jobQueue, resultQueue,
+      reconnectMs: readPositiveInteger(env, 'RABBITMQ_RECONNECT_MS', 5000),
+      retryMs: readPositiveInteger(env, 'RABBITMQ_RETRY_MS', 5000) },
     storage: readStorageConfig(env),
     transcription,
   }
@@ -93,6 +88,8 @@ function readStorageConfig(env: NodeJS.ProcessEnv): StorageConfig {
     provider,
     bucket: readRequired(env, 'S3_BUCKET'),
     region: readOptional(env.AWS_REGION, 'us-east-1'),
+    ...(env.S3_ENDPOINT?.trim() ? { endpoint: env.S3_ENDPOINT.trim() } : {}),
+    forcePathStyle: readChoice(env.S3_FORCE_PATH_STYLE ?? 'false', 'S3_FORCE_PATH_STYLE', ['true', 'false']) === 'true',
   }
 }
 

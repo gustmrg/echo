@@ -20,6 +20,8 @@ export interface S3ObjectClient {
 export interface S3FileStorageOptions {
   bucket: string
   region: string
+  endpoint?: string
+  forcePathStyle?: boolean
   client?: S3ObjectClient
 }
 
@@ -36,7 +38,7 @@ export class S3FileStorage implements FileStorage {
     }
 
     this.#bucket = options.bucket
-    this.#client = options.client ?? new S3Client({ region: options.region })
+    this.#client = options.client ?? new S3Client({ region: options.region, ...(options.endpoint ? { endpoint: options.endpoint } : {}), forcePathStyle: options.forcePathStyle ?? false })
   }
 
   async openReadStream(storageKey: string, signal: AbortSignal): Promise<Readable> {

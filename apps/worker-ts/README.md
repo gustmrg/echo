@@ -1,57 +1,71 @@
 # Echo Worker
 
-TypeScript background worker for Echo's audio transcription workflow. It polls
-the shared SQLite database, reads audio from local storage or S3, calls the
-configured transcription provider, and persists the transcript atomically.
-
-## Commands
+Node 24 / TypeScript worker. It consumes RabbitMQ jobs, reads audio from S3,
+transcribes or refines it, and publishes results. It never accesses SQLite.
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm test
 pnpm lint
 pnpm build
 ```
 
-The worker supports atomic job claiming, stale processing-lease recovery,
-structured logs, and graceful SIGINT/SIGTERM shutdown. Docker Compose runs this
-worker alongside the API using the shared `appdata` volume.
-
 ## Configuration
 
-Required for all environments:
-
 ```dotenv
-DB_PATH=/data/echo.db
-STORAGE_PROVIDER=local
-STORAGE_LOCAL_ROOT=/data/files
+RABBITMQ_URL=amqp://echo:echo-dev-only@localhost:5672
+RABBITMQ_JOB_QUEUE=echo.jobs
+RABBITMQ_RESULT_QUEUE=echo.results
+STORAGE_PROVIDER=s3
+S3_BUCKET=echo
+AWS_REGION=us-east-1
 TRANSCRIPTION_PROVIDER=openrouter
 OPENROUTER_API_KEY=...
 ```
 
-For S3, set `STORAGE_PROVIDER=s3`, `S3_BUCKET`, and optionally `AWS_REGION`.
-AWS credentials use the standard SDK credential chain. For OpenAI, set
-`TRANSCRIPTION_PROVIDER=openai` and `OPENAI_API_KEY`.
+For local SeaweedFS also set `S3_ENDPOINT=http://localhost:8333`,
+`S3_FORCE_PATH_STYLE=true`, `AWS_ACCESS_KEY_ID=echo-dev`, and
+`AWS_SECRET_ACCESS_KEY=echo-dev-secret`. Production AWS credentials use the SDK
+credential chain. `STORAGE_PROVIDER=local` and `STORAGE_LOCAL_ROOT` remain available
+for isolated tests, but Compose always uses S3 and never mounts API data in the worker.
 
+`JOB_TIMEOUT_MS` defaults to 120000. `RABBITMQ_RECONNECT_MS` and
+`RABBITMQ_RETRY_MS` default to 5000. Queue names must match API configuration.
+For OpenAI set `TRANSCRIPTION_PROVIDER=openai` and `OPENAI_API_KEY`.
+`REFINEMENT_MODEL` and `REFINEMENT_BASE_URL` override the chat model/endpoint;
+refinement uses the selected provider's credentials.
 
-## Recovery and refinement
+## Delivery and failure handling
 
-Each claim gets a random token; only that token can complete or fail the job.
-Expired leases are reclaimed up to three attempts. Transient failures back off
-for 5 then 10 seconds. A final failure is visible in the recording UI and can be
-retried using the existing audio. `retry_count` remains a lifetime failure count;
-`attempt_count` resets for an explicit user retry.
+Both queues are durable; messages are persistent. The consumer uses prefetch 1.
+A result must receive a broker publisher confirmation before its input is acked.
+Transient processing failures wait and nack/requeue once; a redelivered failure
+produces a failed result. The API retries retryable results up to three dispatch
+attempts (5s/10s backoff). Unsupported audio formats fail without retry.
 
-`JOB_TIMEOUT_MS` defaults to the smaller of 120 seconds or half the lease and
-must be shorter than `PROCESSING_LEASE_MS`. Shutdown leaves unfinished jobs
-leased for later recovery. Provider calls may be repeated after an interrupted
-attempt, but stale results cannot overwrite the current claim.
+Transport failures reconnect and leave deliveries unacknowledged. Shutdown aborts
+provider calls and closes the connection so RabbitMQ can redeliver. Malformed
+messages go to `<queue>.invalid` dead-letter queues. Operators should inspect and
+repair these messages rather than replay them blindly.
 
-The worker also polls `refinement_jobs`. `REFINEMENT_MODEL` selects the chat model
-(default `openai/gpt-4.1-mini` for OpenRouter or `gpt-4.1-mini` for OpenAI).
-`REFINEMENT_BASE_URL` optionally overrides the provider base URL. Credentials are
-the selected transcription provider's credentials. Generation records preserve
-the source revision/text, format, returned model, provider, and prompt version.
+Audio is downloaded into a private temporary directory, then streamed from disk
+to the transcription adapter. The directory is removed after success, failure,
+or graceful cancellation. A hard process kill can leave temporary files until
+container replacement; no audio or database volume is mounted in the worker.
 
-Run `dotnet tool restore` at the repository root before migration-backed tests.
+Delivery is at least once: provider calls can repeat after a crash or lost
+confirmation. The API fences results using the job ID and claim token, so duplicate
+or obsolete results cannot overwrite a completed job or a newer attempt.
+
+See [message protocol](../../docs/JOB-QUEUE.md) for contracts and recovery details.
+
+For a real broker restart test, start a disposable Compose project and run from
+this directory:
+
+```bash
+ECHO_TEST_DOCKER_PROJECT=echo-tests pnpm test:integration
+```
+
+This command **restarts that project's RabbitMQ container**. Without an explicit
+project it skips the test. Use only disposable infrastructure.
