@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getRecording, deleteRecording } from '../api/recordings'
+import { getRecording, deleteRecording, retryTranscription } from '../api/recordings'
+import { clearRecordingStorage } from '../lib/storage'
 import StatusBadge from '../components/StatusBadge'
 import TranscriptEditor from '../components/TranscriptEditor'
 import { Button, ConfirmDialog, IconAlert, IconSparkle, IconTrash, PageHeader } from '../components/ui'
@@ -26,10 +27,16 @@ export default function ReviewPage() {
   const { mutate: remove, isPending: isDeleting } = useMutation({
     mutationFn: () => deleteRecording(recordingId),
     onSuccess: () => {
+      clearRecordingStorage(recordingId)
       queryClient.invalidateQueries({ queryKey: ['recordings'] })
       queryClient.removeQueries({ queryKey: ['recordings', recordingId] })
-      navigate({ to: '/' })
+      navigate({ to: '/', ignoreBlocker: true })
     },
+  })
+
+  const retry = useMutation({
+    mutationFn: () => retryTranscription(recordingId, recording?.retryCount ?? 0),
+    onSuccess: (result) => { queryClient.setQueryData(['recordings', recordingId], result) },
   })
 
   const isProcessing = recording?.status === 'pending' || recording?.status === 'transcribing'
@@ -128,7 +135,7 @@ export default function ReviewPage() {
             {/* Transcript editor */}
             {recording.status === 'transcribed' && (
               recording.transcribedText ? (
-                <TranscriptEditor recordingId={recording.id} original={recording.transcribedText} />
+                <TranscriptEditor key={recording.id} recordingId={recording.id} original={recording.transcribedText} editedText={recording.editedText} revision={recording.transcriptRevision} />
               ) : (
                 <p className="text-sm text-text-secondary py-8 text-center">
                   Transcription finished but returned no text. The audio may be silent.
@@ -136,15 +143,16 @@ export default function ReviewPage() {
               )
             )}
 
+            {retry.error && <p role="alert" className="text-accent">{retry.error.message}</p>}
             {/* Failed */}
             {recording.status === 'failed' && (
               <div className="flex flex-col items-center justify-center py-16 gap-4">
                 <IconAlert className="text-accent opacity-70" />
                 <p className="text-sm text-text-secondary text-center max-w-[280px]">
-                  Transcription failed. This can happen with very short or silent audio.
+                  {recording.failureReason ?? 'Transcription failed. You can retry using the saved audio.'}
                 </p>
-                <Button variant="danger" onClick={() => setConfirmDelete(true)} className="px-4 py-2.5 text-sm">
-                  Delete and try again
+                <Button disabled={retry.isPending} onClick={() => retry.mutate()} className="px-4 py-2.5 text-sm">
+                  Retry transcription
                 </Button>
               </div>
             )}

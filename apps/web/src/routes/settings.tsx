@@ -1,8 +1,8 @@
 const pipeline = [
   { stage: 'Record or import audio', live: true },
-  { stage: 'Transcription (Whisper via worker)', live: true },
-  { stage: 'Transcript editing — saved locally in your browser', live: false },
-  { stage: 'AI refinement (Blog, Interview, Notes, News) — mocked responses', live: false },
+  { stage: 'Audio transcription', live: true },
+  { stage: 'Transcript editing — saved across sessions', live: true },
+  { stage: 'AI refinement (Blog, Interview, Notes, News)', live: true },
   { stage: 'Copy & download output', live: true },
 ]
 
@@ -34,8 +34,7 @@ export default function SettingsPage() {
             ))}
           </ul>
           <p className="text-[11px] text-text-tertiary mt-4 leading-relaxed">
-            Stages marked in amber run entirely in the browser as placeholders until the API grows
-            the matching endpoints.
+            Recordings, transcript edits, and generated outputs are saved on the server.
           </p>
         </div>
 

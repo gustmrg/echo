@@ -24,6 +24,8 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
   const [levels, setLevels] = useState<number[]>(SILENCE)
 
   const chunks = useRef<Blob[]>([])
+  const finalization = useRef<Promise<Blob> | null>(null)
+  const starting = useRef(false)
   const recorder = useRef<MediaRecorder | null>(null)
   const stream = useRef<MediaStream | null>(null)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -95,6 +97,10 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
   }
 
   async function start() {
+    if (starting.current || recorder.current) return
+    starting.current = true
+    finalization.current = null
+    try {
     const s = await navigator.mediaDevices.getUserMedia({ audio: true })
     stream.current = s
 
@@ -121,6 +127,12 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     setState('recording')
     startTimer()
     startLevelLoop()
+    } catch (error) {
+      stopTracks()
+      teardownAudioGraph()
+      recorder.current = null
+      throw error
+    } finally { starting.current = false }
   }
 
   function pause() {
@@ -138,7 +150,8 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
   }
 
   function stop(): Promise<Blob> {
-    return new Promise((resolve) => {
+    if (finalization.current) return finalization.current
+    finalization.current = new Promise((resolve) => {
       const mr = recorder.current
       teardownAudioGraph()
       if (!mr || mr.state === 'inactive') {
@@ -156,6 +169,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
       stopTimer()
       mr.stop()
     })
+    return finalization.current
   }
 
   function discard() {
@@ -169,6 +183,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     stopTracks()
     recorder.current = null
     chunks.current = []
+    finalization.current = null
     setState('idle')
     setElapsedSeconds(0)
   }

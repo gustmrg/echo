@@ -1,4 +1,4 @@
-import type { FormatInfo, OutputFormat } from '../mocks/refine'
+import type { FormatInfo, OutputFormat } from '../lib/formats'
 
 const icons: Record<OutputFormat, React.ReactNode> = {
   blog: (

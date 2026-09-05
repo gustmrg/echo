@@ -1,17 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { getRecording } from '../api/recordings'
-import { FORMATS, FORMAT_LABELS, refineTranscript } from '../mocks/refine'
-import type { OutputFormat } from '../mocks/refine'
+import { FORMATS, FORMAT_LABELS } from '../lib/formats'
+import type { OutputFormat } from '../lib/formats'
 import FormatCard from '../components/FormatCard'
 import OutputRenderer from '../components/OutputRenderer'
 import { Button, IconCheck, IconCopy, IconDownload, IconSparkle, PageHeader, Spinner } from '../components/ui'
-import { getEditedTranscript, getSavedOutput, saveOutput } from '../lib/storage'
+import { createRefinement, getRefinements } from '../api/refinements'
 
-type Phase = 'pick' | 'processing' | 'done' | 'error'
-
-const STAGES = ['Analyzing transcript', 'Structuring content', 'Polishing language']
 
 export default function RefinePage() {
   const { recordingId } = useParams({ from: '/recordings/$recordingId/refine' })
@@ -22,49 +19,43 @@ export default function RefinePage() {
     queryFn: () => getRecording(recordingId),
   })
 
-  const [phase, setPhase] = useState<Phase>('pick')
   const [format, setFormat] = useState<OutputFormat | null>(null)
-  const [output, setOutput] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [requestError, setRequestError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [stage, setStage] = useState(0)
-
-  const transcript = recording
-    ? (getEditedTranscript(recordingId) ?? recording.transcribedText ?? '')
-    : ''
-
-  // Cycle the staged processing messages while the (mock) refinement runs
-  useEffect(() => {
-    if (phase !== 'processing') return
-    const t = setInterval(() => setStage((s) => Math.min(s + 1, STAGES.length - 1)), 1100)
-    return () => clearInterval(t)
-  }, [phase])
+  const [submitting, setSubmitting] = useState(false)
+  const request = useRef<{ key: string; format: OutputFormat; revision: number; regenerate: boolean } | null>(null)
+  const sending = useRef(false)
+  const jobs = useQuery({
+    queryKey: ['refinements', recordingId],
+    queryFn: () => getRefinements(recordingId),
+    refetchInterval: (query) => query.state.data?.some(j => j.status === 'created' || j.status === 'processing') ? 1000 : false,
+  })
+  const currentJobs = jobs.data?.filter(j => j.transcriptRevision === recording?.transcriptRevision) ?? []
+  const selected = currentJobs.find(j => j.format === format)
+  const output = selected?.status === 'completed' ? selected.content : null
+  const error = requestError ?? jobs.error?.message ?? selected?.failureReason
+  const phase = !format ? 'pick' : submitting ? 'processing' : requestError || jobs.isError || selected?.status === 'failed' ? 'error' :
+    output ? 'done' : selected ? 'processing' : 'pick'
+  const transcript = recording?.editedText ?? recording?.transcribedText ?? ''
 
   async function runRefine(fmt: OutputFormat, regenerate = false) {
+    if (!recording || sending.current) return
     setFormat(fmt)
-    setError(null)
+    setRequestError(null)
     setCopied(false)
-
-    if (!regenerate) {
-      const cached = getSavedOutput(recordingId, fmt)
-      if (cached) {
-        setOutput(cached)
-        setPhase('done')
-        return
-      }
-    }
-
-    setPhase('processing')
-    setStage(0)
+    const cached = currentJobs.find(j => j.format === fmt && j.status !== 'failed')
+    if (!regenerate && cached) return
+    if (!request.current || request.current.format !== fmt || request.current.revision !== recording.transcriptRevision || request.current.regenerate !== regenerate)
+      request.current = { key: crypto.randomUUID(), format: fmt, revision: recording.transcriptRevision, regenerate }
+    sending.current = true
+    setSubmitting(true)
     try {
-      const result = await refineTranscript(transcript, fmt)
-      saveOutput(recordingId, fmt, result)
-      setOutput(result)
-      setPhase('done')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Refinement failed.')
-      setPhase('error')
-    }
+      await createRefinement(recordingId, fmt, recording.transcriptRevision, request.current.key, regenerate)
+      request.current = null
+      await jobs.refetch()
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : 'Could not queue refinement.')
+    } finally { sending.current = false; setSubmitting(false) }
   }
 
   async function copyOutput() {
@@ -145,13 +136,13 @@ export default function RefinePage() {
                   <FormatCard
                     key={f.id}
                     format={f}
-                    cached={getSavedOutput(recordingId, f.id) !== null}
+                    cached={currentJobs.some(j => j.format === f.id && j.status === 'completed')}
                     onSelect={() => void runRefine(f.id)}
                   />
                 ))}
               </div>
               <p className="text-[11px] text-text-tertiary mt-5">
-                Refinement is currently mocked on the client until the API endpoint ships.
+                Your outputs are saved with the reviewed transcript.
               </p>
             </div>
           )}
@@ -162,23 +153,10 @@ export default function RefinePage() {
               <div className="w-12 h-12 rounded-full bg-accent-glow text-accent flex items-center justify-center">
                 <IconSparkle size={22} className="animate-pulse-dot" />
               </div>
-              <div className="space-y-2 w-full max-w-[240px]">
-                {STAGES.map((label, i) => (
-                  <div key={label} className="flex items-center gap-2.5 text-sm">
-                    {i < stage ? (
-                      <IconCheck size={14} className="text-success flex-shrink-0" />
-                    ) : i === stage ? (
-                      <Spinner className="w-3.5 h-3.5 flex-shrink-0" />
-                    ) : (
-                      <span className="w-3.5 h-3.5 rounded-full border border-border flex-shrink-0" />
-                    )}
-                    <span className={i <= stage ? 'text-text-primary' : 'text-text-tertiary'}>
-                      {label}
-                      {i === stage ? '…' : ''}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <p role="status" className="text-sm text-text-primary">
+                {submitting ? 'Queuing refinement…' : selected?.status === 'created' ? 'Waiting to refine…' : 'Refining your transcript…'}
+              </p>
+              <Spinner className="w-5 h-5" />
               <p className="text-xs text-text-tertiary">as {FORMAT_LABELS[format]}</p>
             </div>
           )}
@@ -190,7 +168,7 @@ export default function RefinePage() {
                 {error ?? 'Refinement failed.'}
               </p>
               <div className="flex gap-2.5">
-                <Button variant="secondary" onClick={() => setPhase('pick')} className="px-4 py-2.5 text-sm">
+                <Button variant="secondary" onClick={() => setFormat(null)} className="px-4 py-2.5 text-sm">
                   Choose format
                 </Button>
                 <Button onClick={() => void runRefine(format, true)} className="px-4 py-2.5 text-sm">
@@ -228,7 +206,7 @@ export default function RefinePage() {
                 <Button variant="secondary" onClick={() => void runRefine(format, true)} className="py-3 text-sm">
                   Regenerate
                 </Button>
-                <Button variant="ghost" onClick={() => setPhase('pick')} className="py-3 text-sm">
+                <Button variant="ghost" onClick={() => setFormat(null)} className="py-3 text-sm">
                   Try another format
                 </Button>
               </div>

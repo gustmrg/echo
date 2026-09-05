@@ -1,18 +1,54 @@
 import { useEffect, useRef, useState } from 'react'
-import { getEditedTranscript, saveEditedTranscript, clearEditedTranscript } from '../lib/storage'
+import { readDraft, writeDraft, clearDraft } from '../lib/storage'
+import { saveTranscript } from '../api/recordings'
+import { TranscriptSession } from '../lib/transcript-session'
+import { useBlocker } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { IconRedo, IconUndo } from './ui'
 
 interface TranscriptEditorProps {
   recordingId: string
   original: string
-  onChange?: (text: string) => void
+  editedText: string | null
+  revision: number
 }
 
 const HISTORY_LIMIT = 100
 const COALESCE_MS = 600
 
-export default function TranscriptEditor({ recordingId, original, onChange }: TranscriptEditorProps) {
-  const [text, setText] = useState(() => getEditedTranscript(recordingId) ?? original)
+export default function TranscriptEditor({ recordingId, original, editedText, revision }: TranscriptEditorProps) {
+  const queryClient = useQueryClient()
+  const [session] = useState(() => new TranscriptSession(editedText ?? original, revision, async (value, expected) => {
+    const recording = await saveTranscript(recordingId, value, expected)
+    queryClient.setQueryData(['recordings', recordingId], recording)
+    return recording.transcriptRevision
+  }, readDraft(recordingId, revision)))
+  const [text, updateText] = useState(session.text)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  function setText(value: string) {
+    session.edit(value)
+    writeDraft(recordingId, value, session.revision)
+    updateText(value)
+  }
+  async function flush() {
+    setSaving(true)
+    try {
+      await session.flush()
+      clearDraft(recordingId)
+      setSaveError(null)
+    } catch (error) {
+      writeDraft(recordingId, session.text, session.revision)
+      setSaveError(error instanceof Error ? error.message : 'Could not save transcript.')
+      throw error
+    } finally { setSaving(false) }
+  }
+  useBlocker({
+    shouldBlockFn: async () => {
+      try { await flush(); return false } catch { return true }
+    },
+    enableBeforeUnload: () => session.dirty,
+  })
   const [past, setPast] = useState<string[]>([])
   const [future, setFuture] = useState<string[]>([])
   const lastPush = useRef(0)
@@ -29,17 +65,12 @@ export default function TranscriptEditor({ recordingId, original, onChange }: Tr
     el.style.height = `${el.scrollHeight}px`
   }, [text])
 
-  // Debounced auto-save of edits (no API endpoint exists for this yet)
   useEffect(() => {
-    const t = setTimeout(() => {
-      if (text !== original) saveEditedTranscript(recordingId, text)
-    }, 500)
-    return () => clearTimeout(t)
-  }, [text, original, recordingId])
-
-  useEffect(() => {
-    onChange?.(text)
-  }, [text, onChange])
+    const timer = setTimeout(() => { void flush().catch(() => {}) }, 500)
+    return () => clearTimeout(timer)
+    // The session is stable; text changes schedule saving.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text])
 
   function commit(next: string) {
     const now = Date.now()
@@ -70,7 +101,6 @@ export default function TranscriptEditor({ recordingId, original, onChange }: Tr
   function reset() {
     setPast([])
     setFuture([])
-    clearEditedTranscript(recordingId)
     setText(original)
   }
 
@@ -112,6 +142,8 @@ export default function TranscriptEditor({ recordingId, original, onChange }: Tr
 
       {/* Editor */}
       <textarea
+        aria-label="Transcript"
+        maxLength={200000}
         ref={areaRef}
         value={text}
         onChange={(e) => commit(e.target.value)}
@@ -120,6 +152,10 @@ export default function TranscriptEditor({ recordingId, original, onChange }: Tr
         className="w-full min-h-[280px] resize-none bg-surface border border-border rounded-md p-4 text-[15px] leading-[1.75] text-text-primary outline-none focus:border-text-tertiary transition-colors overflow-hidden"
       />
 
+      {saveError && <div role="alert" className="text-sm text-accent mt-2">
+        {saveError} Your text is retained here.
+        <button onClick={() => void flush().catch(() => {})} className="underline ml-2">Retry save</button>
+      </div>}
       {/* Footer stats */}
       <div className="flex items-center gap-3 mt-2 text-[11px] text-text-tertiary tabular-nums">
         <span>{words.toLocaleString()} words</span>
@@ -128,7 +164,7 @@ export default function TranscriptEditor({ recordingId, original, onChange }: Tr
         {isEdited && (
           <>
             <span aria-hidden>·</span>
-            <span className="text-warning">edited · saved locally</span>
+            <span className="text-warning">{saving ? 'Saving…' : session.dirty ? 'Unsaved changes' : 'Saved'}</span>
           </>
         )}
       </div>

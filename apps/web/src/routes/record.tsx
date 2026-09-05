@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useBlocker } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
 import { createRecording } from '../api/recordings'
@@ -44,22 +44,43 @@ export default function RecordPage() {
   const [micError, setMicError] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [capReached, setCapReached] = useState(false)
+  const [draft, setDraft] = useState<{ file: File; key: string } | null>(null)
+  const [finalizing, setFinalizing] = useState(false)
+  const finishing = useRef(false)
+  useBlocker({
+    shouldBlockFn: () => (draft !== null || state !== 'idle') && !window.confirm('Discard this unsaved audio and leave?'),
+    enableBeforeUnload: draft !== null || state !== 'idle',
+  })
   const fileInput = useRef<HTMLInputElement | null>(null)
 
   const { mutate: upload, isPending: isUploading, error: uploadError } = useMutation({
-    mutationFn: (file: File) => createRecording(file),
+    mutationFn: (draft: { file: File; key: string }) => createRecording(draft.file, draft.key),
     onSuccess: (recording) => {
+      setDraft(null)
       queryClient.invalidateQueries({ queryKey: ['recordings'] })
-      navigate({ to: '/recordings/$recordingId', params: { recordingId: recording.id } })
+      navigate({ to: '/recordings/$recordingId', params: { recordingId: recording.id }, ignoreBlocker: true })
     },
   })
 
   const finishAndUpload = useCallback(async (autoStopped = false) => {
-    const blob = await stop()
-    if (autoStopped) setCapReached(true)
-    const ext = extensionForMime(blob.type)
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-    upload(new File([blob], `recording-${stamp}.${ext}`, { type: blob.type || 'audio/webm' }))
+    if (finishing.current) return
+    finishing.current = true
+    setFinalizing(true)
+    try {
+      const blob = await stop()
+      if (autoStopped) setCapReached(true)
+      const ext = extensionForMime(blob.type)
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      const file = new File([blob], `recording-${stamp}.${ext}`, { type: blob.type || 'audio/webm' })
+      const pending = { file, key: crypto.randomUUID() }
+      setDraft(pending)
+      const problem = validateImport(file)
+      if (problem) setImportError(problem)
+      else upload(pending)
+    } catch {
+      setMicError('Could not finalize the recording. Please try again.')
+      finishing.current = false
+    } finally { setFinalizing(false) }
   }, [stop, upload])
 
   // Auto-stop at the 30-minute cap
@@ -90,7 +111,9 @@ export default function RecordPage() {
 
   function handleDiscard() {
     discard()
-    navigate({ to: '/' })
+    setDraft(null)
+    finishing.current = false
+    navigate({ to: '/', ignoreBlocker: true })
   }
 
   function handleImportClick() {
@@ -107,7 +130,9 @@ export default function RecordPage() {
       setImportError(problem)
       return
     }
-    upload(file)
+    const pending = { file, key: crypto.randomUUID() }
+    setDraft(pending)
+    upload(pending)
   }
 
   const label =
@@ -187,15 +212,28 @@ export default function RecordPage() {
           </p>
         )}
 
+        {draft && !isUploading && (
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-sm text-text-secondary">Your audio is retained until you upload or discard it.</p>
+            <Button onClick={() => upload(draft)} disabled={!!validateImport(draft.file)}>Retry upload</Button>
+            <Button variant="secondary" onClick={() => {
+              const url = URL.createObjectURL(draft.file)
+              const link = document.createElement('a')
+              link.href = url; link.download = draft.file.name; link.click()
+              setTimeout(() => URL.revokeObjectURL(url), 1000)
+            }}>Download audio</Button>
+            <Button variant="ghost" onClick={handleDiscard}>Discard audio</Button>
+          </div>
+        )}
         {/* File import (idle only) */}
-        {!isActive && (
+        {!isActive && !draft && (
           <div className="flex flex-col items-center gap-3 mt-2">
             <div className="flex items-center gap-3 w-[220px]">
               <div className="flex-1 h-px bg-border" />
               <span className="text-[11px] uppercase tracking-[0.08em] text-text-tertiary">or</span>
               <div className="flex-1 h-px bg-border" />
             </div>
-            <Button variant="secondary" onClick={handleImportClick} disabled={isUploading} className="py-2.5 text-sm">
+            <Button variant="secondary" onClick={handleImportClick} disabled={isUploading || finalizing || draft !== null} className="py-2.5 text-sm">
               {isUploading ? <Spinner className="w-4 h-4" /> : <IconUpload size={16} />}
               Import an audio file
             </Button>
@@ -216,6 +254,7 @@ export default function RecordPage() {
         {/* Discard */}
         <button
           onClick={handleDiscard}
+          disabled={finalizing || isUploading}
           aria-label="Discard recording"
           style={{ visibility: isActive ? 'visible' : 'hidden' }}
           className="w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center text-text-secondary hover:bg-surface-hover active:scale-90 transition-all touch-manipulation"
@@ -226,7 +265,7 @@ export default function RecordPage() {
         {/* Primary button */}
         <button
           onClick={handlePrimaryBtn}
-          disabled={isUploading}
+          disabled={isUploading || finalizing || draft !== null}
           aria-label={isRecording ? 'Pause recording' : state === 'paused' ? 'Resume recording' : 'Start recording'}
           className={`w-20 h-20 rounded-full border-2 flex items-center justify-center active:scale-90 transition-all duration-[250ms] ease-[var(--ease-spring)] disabled:opacity-50 touch-manipulation ${
             isRecording
@@ -244,7 +283,7 @@ export default function RecordPage() {
         {/* Done */}
         <button
           onClick={() => void finishAndUpload()}
-          disabled={isUploading}
+          disabled={isUploading || finalizing || draft !== null}
           aria-label="Finish and upload"
           style={{ visibility: isActive ? 'visible' : 'hidden' }}
           className="w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center text-text-secondary hover:bg-surface-hover active:scale-90 transition-all touch-manipulation disabled:opacity-50"
