@@ -86,6 +86,16 @@ docker compose down -v
 Use `docker compose down -v` only when you want to remove the SQLite database
 and the RabbitMQ/S3 data volumes.
 
+## Local transcription
+
+Set `TRANSCRIPTION_PROVIDER=whisper-cpp` to execute a model inside the worker.
+See [embedded whisper.cpp setup](docs/WHISPER-CPP.md) for model installation,
+Docker configuration, and the reusable engine intended for a future desktop app.
+
+Alternatively, set `TRANSCRIPTION_PROVIDER=local` to use a locally hosted speech model without
+OpenRouter or OpenAI credentials. See [local model setup](docs/LOCAL-MODELS.md)
+for Whisper/Speaches, Docker networking, and optional local LLM refinement.
+
 ## Run the web app
 
 Use Node 24+, pnpm 10.34.5, and .NET 10. From `apps/web`, run
@@ -93,7 +103,9 @@ Use Node 24+, pnpm 10.34.5, and .NET 10. From `apps/web`, run
 `http://localhost:5143` for `dotnet run`; when using Compose, launch Vite with
 `API_PROXY_TARGET=http://localhost:8080 pnpm dev`.
 
-The worker uses the transcription provider's credentials for refinement.
+The worker defaults to the transcription provider for refinement.
+`REFINEMENT_PROVIDER` selects `openrouter`, `openai`, or `local` independently;
+`REFINEMENT_API_KEY` optionally overrides that provider's credentials.
 `REFINEMENT_MODEL` optionally overrides the default (`openai/gpt-4.1-mini` on
 OpenRouter, `gpt-4.1-mini` on OpenAI). `REFINEMENT_BASE_URL` overrides the chat
 endpoint base for compatible providers. `JOB_TIMEOUT_MS` defaults to 120 seconds. RabbitMQ manages redelivery after worker interruption.

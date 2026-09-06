@@ -1,0 +1,13 @@
+# Add to the development stack with:
+# docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.whisper.yml up --build
+services:
+  worker:
+    environment:
+      TRANSCRIPTION_PROVIDER: whisper-cpp
+    volumes:
+      - type: bind
+        source: ${WHISPER_MODELS_DIR:-./models}
+        target: /models
+        read_only: true
+        bind:
+          create_host_path: false

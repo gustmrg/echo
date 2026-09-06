@@ -486,3 +486,6 @@ dist/
 # Local package cache and browser test artifacts
 .pnpm-store/
 playwright-report/
+
+# Downloaded speech model weights
+/models/
