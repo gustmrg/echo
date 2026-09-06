@@ -19,7 +19,10 @@ export class ChatRefiner implements Refiner {
   async refine(text: string, format: OutputFormat, signal: AbortSignal): Promise<RefinementResult> {
     const response = await this.request(`${this.config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${this.config.apiKey}`, 'Content-Type': 'application/json' },
+      headers: {
+        ...(this.config.apiKey ? { Authorization: `Bearer ${this.config.apiKey}` } : {}),
+        'Content-Type': 'application/json',
+      },
       signal,
       body: JSON.stringify({
         model: this.config.model,

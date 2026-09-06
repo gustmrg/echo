@@ -34,7 +34,36 @@ for isolated tests, but Compose always uses S3 and never mounts API data in the 
 `RABBITMQ_RETRY_MS` default to 5000. Queue names must match API configuration.
 For OpenAI set `TRANSCRIPTION_PROVIDER=openai` and `OPENAI_API_KEY`.
 `REFINEMENT_MODEL` and `REFINEMENT_BASE_URL` override the chat model/endpoint;
-refinement uses the selected provider's credentials.
+`REFINEMENT_PROVIDER` independently selects `openrouter`, `openai`, or `local`
+(default: transcription provider). `REFINEMENT_API_KEY` overrides chat credentials.
+
+For local speech inference set `TRANSCRIPTION_PROVIDER=local`,
+`LOCAL_TRANSCRIPTION_MODEL` to an installed speech model, and
+`LOCAL_TRANSCRIPTION_BASE_URL` to the server's API base (default:
+`http://localhost:8000/v1`). `LOCAL_TRANSCRIPTION_API_KEY` is optional.
+The adapter sends multipart `file`, `model`, and `response_format=json` to
+`/audio/transcriptions` and expects a nonempty JSON `text` field. It supports
+FLAC, M4A, MP3, MP4, MPEG, MPGA, OGG, WAV, and WebM, subject to server support.
+Failures follow normal job retries; there is no automatic cloud fallback.
+
+Local refinement requires `REFINEMENT_MODEL`; its default base URL is
+`http://localhost:11434/v1`, separate from the speech server. No cloud keys are
+required when both providers are local. For complete setup and Docker addresses,
+see [local models](../../docs/LOCAL-MODELS.md).
+
+## Embedded whisper.cpp
+
+`TRANSCRIPTION_PROVIDER=whisper-cpp` executes FFmpeg and whisper-cli locally.
+`WHISPER_MODEL_PATH` is required. Optional settings: `WHISPER_BINARY_PATH`
+(default `whisper-cli`), `FFMPEG_PATH` (`ffmpeg`), `WHISPER_LANGUAGE` (`auto`),
+`WHISPER_THREADS` (`4`), and `WHISPER_USE_GPU` (`false`). The bundled image uses CPU.
+Refinement defaults to `local` for this provider and requires `REFINEMENT_MODEL`;
+choose `REFINEMENT_PROVIDER=openrouter` or `openai` for remote refinement.
+
+See [setup and desktop reuse](../../docs/WHISPER-CPP.md). The file engine in
+`src/transcription/whisper-cpp/engine.ts` accepts explicit paths/options and an
+AbortSignal. It does not import configuration, messaging, storage, or Electron.
+The stream adapter implements the existing worker `Transcriber` contract.
 
 ## Delivery and failure handling
 

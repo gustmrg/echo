@@ -28,3 +28,13 @@ it('rejects truncated outputs and provider errors', async () => {
     await assert.rejects(refiner.refine('text', 'notes', new AbortController().signal))
   }
 })
+
+it('uses local chat without an authorization header and preserves provider metadata', async () => {
+  const refiner = new ChatRefiner({ ...config, provider: 'local', apiKey: '' }, async (_url, init) => {
+    assert.equal(new Headers(init?.headers).has('authorization'), false)
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: 'Local notes' } }] })
+  })
+  const result = await refiner.refine('source', 'notes', new AbortController().signal)
+  assert.equal(result.provider, 'local')
+  assert.equal(result.content, 'Local notes')
+})
