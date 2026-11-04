@@ -1,24 +1,47 @@
 # Echo
 
-Echo is a speech-to-text workflow app that records audio, transcribes it, then
-uses AI to polish and structure the text. It is designed for fast capture,
-review, and publishing-ready outputs.
+Echo is an audio-first note-taking app. Record or import audio, keep your
+recordings in a personal library, and turn them into useful text with AI
+whenever you're ready.
+
+Start with a transcription, review it if needed, then choose how to shape
+your note: a blog post, an interview, organized thoughts, or a news brief.
+Your original audio remains the source material.
 
 ## What you can create
 
 - **Blog post**: transcribe, review, and refine into a publishable post
 - **Interview**: dialog format that preserves each speaker's personality
-- **Notes**: quick thought capture and clean transcription
+- **Notes**: capture scattered thoughts and organize them without forcing them into a formal article
 - **News brief**: factual summary with clear points and bullets
 
 ## How it works
 
-1. Record or import audio
-2. Transcribe audio to text
-3. Review and edit the transcript
-4. Choose an output format: Blog, Interview, Notes, or News
-5. Let AI refine the text to match the selected structure
-6. Copy or export the final result
+1. Record or import audio and save it to your library
+2. Generate an initial transcription
+3. Return to your notes whenever you're ready
+4. Review and edit the transcript if needed
+5. Choose an output format: Blog, Interview, Notes, or News
+6. Ask AI to organize and polish the text
+7. Review, copy, or export the result
+
+You don't need to finish the entire workflow at once. Keep multiple
+recordings and return to any note later to review or format it.
+
+## AI providers
+
+Echo aims to support both local models and external AI APIs, with separate
+provider choices for transcription and text formatting.
+
+The current implementation includes OpenAI and OpenRouter integrations.
+Local model support is part of the intended scope and still needs to be
+implemented and validated.
+
+## Current scope
+
+Echo currently targets private use. Authentication and ownership, production
+web hosting, and server-side pagination remain outside this milestone.
+Keep the deployment private until access control exists.
 
 ## Architecture
 
@@ -132,9 +155,6 @@ RabbitMQ worker and S3 adapters with a local AI provider stub (no paid calls).
 It checks upload recovery, durable editing, refinement, bounded retries and deletion.
 Stop test infrastructure afterward with `docker compose -p echo-tests down`.
 API tests verify migrations, outbox durability, duplicate/stale results and retry bounds.
-
-Authentication and ownership, production web hosting, and pagination remain
-outside this milestone. Keep the deployment private until access control exists.
 
 ## License
 
