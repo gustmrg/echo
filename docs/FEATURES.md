@@ -1,276 +1,153 @@
-# Echo — Features Document
+# Echo — Features & Capability Matrix
 
-> **Version:** 1.0  
-> **Last updated:** February 28, 2026  
-> **Status:** Planning
+> **Status:** As-built reference  
+> **Last updated:** 2026-11-25
 
----
+Echo is an audio-first note-taking application. Record or import spoken audio, keep your recordings in a personal library, review and edit transcripts across sessions, and refine them with AI into structured formats (`blog`, `interview`, `notes`, or `news`).
 
-## Overview
-
-Echo transforms spoken audio into polished, structured text. This document describes each feature area of the application, how it works, and the technical approach behind it.
+For architectural rationale and message-queue contracts, see the [Architecture Decision Records](adr/README.md) and [Job Queue Protocol](JOB-QUEUE.md).
 
 ---
 
-## F1: Audio Capture
+## Capability Matrix
 
-### Description
-
-Audio capture is the entry point of the Echo pipeline. Users can either record audio live in the browser or import a pre-recorded file. Think of this as the "input stage" — similar to how a file upload endpoint receives raw data before any processing happens.
-
-### Capabilities
-
-- **Live recording** via the browser's MediaRecorder API with start, pause, resume, and stop controls
-- **File import** supporting common audio formats: MP3, WAV, M4A, WebM, OGG
-- **Waveform visualization** during recording so users can confirm audio is being captured
-- **Recording timer** displaying elapsed duration in real time
-- **Max duration** of 30 minutes for MVP (extensible in future releases)
-- **Audio quality target** of 16kHz+ sample rate for optimal transcription accuracy
-
-### Technical Approach
-
-The frontend uses the `navigator.mediaDevices.getUserMedia()` API to access the microphone and pipes the stream into a `MediaRecorder` instance. Audio chunks are accumulated in memory as `Blob` segments and merged into a single file on stop. For file imports, a standard file input accepts the supported MIME types and validates format/size before proceeding.
-
-### Acceptance Criteria
-
-- [ ] User can start, pause, resume, and stop a recording
-- [ ] User can import an audio file from their device
-- [ ] A waveform or level indicator is visible during recording
-- [ ] Unsupported file formats show a clear error message
-- [ ] Files over the size limit are rejected with guidance
+| Capability | Status | Summary |
+| --- | --- | --- |
+| Audio capture & file import | **Live** | Browser microphone recording (`MediaRecorder`) with start/pause/resume/stop/discard, live level bars, 30-minute cap, and audio file import (up to 25 MB). |
+| Resilient upload & S3 storage | **Live** | Magic-byte validation, UUID `Idempotency-Key` + SHA-256 deduplication, in-tab failure recovery (retry/download/discard), SeaweedFS S3 in dev, AWS S3 in prod. |
+| Asynchronous transcription | **Live** | API-owned SQLite transactional outbox (`job_outbox`) → RabbitMQ → TypeScript worker (`OpenRouter` or `OpenAI`), bounded retries with backoff, manual retry endpoint. |
+| Revisioned transcript editing | **Live** | Server-persisted edits with `TranscriptRevision` optimistic concurrency, undo/redo, reset to original, debounced auto-save, `localStorage` recovery draft, navigation guard. |
+| AI refinement (4 formats) | **Live** | Async LLM refinement into **Blog Post**, **Interview**, **Notes**, or **News Brief** pinned to the saved transcript revision, with `RequestKey` replay deduplication and regeneration. |
+| Output preview & export | **Live** | Formatted Markdown preview, word count, one-click clipboard copy, `.md` file download, and a Saved Outputs view across recordings. |
+| Library & history | **Live** | Personal recording library with featured "continue reviewing" card, stage filter, client-side title/filename search, newest-first ordering, and permanent deletion. |
+| Audio playback | **Planned** | Stream or replay the original uploaded audio inside the review screen via authenticated API streaming or short-lived S3 presigned URLs. |
+| Title editing | **Planned** | API endpoint and UI to rename recordings (persisted to the existing `recordings.title` column). |
+| Custom refinement guidance | **Planned** | Optional user instructions (tone, audience, length, emphasis) layered on top of the four base formats. |
+| Full-text search & server pagination | **Planned** | Server-side search across titles, transcripts, and refined outputs, plus paginated slim list responses for `GET /api/recordings`. |
+| Local AI providers | **Planned** | First-class validated local model adapters (e.g., local Whisper and local OpenAI-compatible chat servers) alongside OpenRouter and OpenAI. |
+| Authentication & web deployment | **Planned** | User identity, per-user recording ownership, scoped queries/mutations, and production web hosting configuration. |
+| Personal blog authoring workflow | **Planned** | Editable refined drafts, frontmatter metadata, and publishing-friendly Markdown export built on the `blog` output format. |
 
 ---
 
-## F2: Audio Transcription
+## Live Capabilities (As Built)
 
-### Description
+### 1. Audio Capture & File Import
 
-Transcription converts captured audio into raw text using OpenAI Whisper. The processing happens entirely on the server side — the client uploads the audio, the server calls Whisper, and the result comes back as plain text. If you're familiar with C# backend patterns, this is like a controller action that receives a file, delegates to an external service, and returns the result.
+Users start from `/record` (`apps/web/src/routes/record.tsx`) to either record live or import an existing recording:
 
-### Capabilities
+- **Live recording:** Uses `navigator.mediaDevices.getUserMedia()` and `MediaRecorder` (`useAudioRecorder`) with start, pause, resume, stop, and discard controls.
+- **Live feedback:** Displays real-time audio input level bars and an elapsed duration timer.
+- **Safety cap:** Automatically stops and prepares upload at 30 minutes (`MAX_SECONDS = 1800`).
+- **File import:** Accepts MP3, WAV, M4A, WebM, and OGG files up to 25 MB in the browser; the API additionally validates FLAC and MP4 audio containers (`AudioFileValidator`).
+- **Tab-level recovery:** If an upload fails, the finalized audio remains in the current tab with **Retry upload** (reusing the same UUID `Idempotency-Key`), **Download audio**, and **Discard audio** actions, plus a navigation guard (`useBlocker` / `beforeunload`) to prevent accidental loss.
 
-- **OpenAI Whisper API** integration for speech-to-text conversion
-- **Server-side processing** via TanStack Start server functions (API keys never exposed to the client)
-- **Multipart upload** using multer-style file handling on the backend
-- **Progress indication** with status updates: uploading → processing → complete
-- **Language detection** — English primary, with Whisper's automatic detection for other languages
-- **Error recovery** with clear messages if transcription fails (network, timeout, bad audio)
+### 2. Upload & S3 Object Storage
 
-### Technical Approach
+Uploads target `POST /api/recordings` (`CreateRecording.cs`):
 
-A TanStack Start server function receives the audio blob as multipart form data. The server function forwards the file to the OpenAI Whisper API endpoint, awaits the response, and returns the transcribed text to the client. Environment variables for the API key are managed via T3Env and only accessible server-side.
+- **Validation:** Rejects empty files, files over 25 MB, unsupported MIME types, and files whose leading magic bytes do not match their declared container (`WebM`, `MP4/M4A`, `MP3`, `WAV`, `FLAC`, `OGG`).
+- **Idempotency:** Requires a UUID `Idempotency-Key` header stored in unique-indexed `recordings.upload_key` alongside a composite SHA-256 hash (`UploadHash`) of audio bytes, filename, and normalized content type. Replaying the same key with the same audio returns `200 OK`; reusing it with different audio returns `409 Conflict`.
+- **Object storage:** Stores audio behind `IFileStorage` under `recordings/<recordingId>/<guid><ext>` (SeaweedFS `weed mini` locally via `docker-compose.override.yml`; AWS S3 in production via `docker-compose.prod.yml`). If SQLite commit fails after upload, the API performs best-effort S3 cleanup.
+- **Deletion:** `DELETE /api/recordings/{id}` removes the S3 object before deleting the SQLite recording (cascading to transcription jobs, refinement jobs, and refinement requests) and clears browser recovery drafts.
 
-### Acceptance Criteria
+### 3. Asynchronous Transcription
 
-- [ ] Audio is uploaded and transcribed without exposing API keys to the browser
-- [ ] User sees a progress indicator during transcription
-- [ ] Transcription completes in under 3 minutes for 10-minute audio
-- [ ] Failed transcriptions show a user-friendly error with retry option
-- [ ] Transcribed text appears in the review editor
+Transcription runs outside HTTP request lifecycles:
 
----
+- **Single-owner SQLite + Outbox:** `CreateRecording` commits a `Recording` (`pending`) and `TranscriptionJob` (`created`). `RabbitJobService` atomically marks due jobs `processing` (`Recording.Status = transcribing`), generates a `ClaimToken`, writes to `job_outbox`, and publishes persistent messages to `echo.jobs` with publisher confirms.
+- **Stateless TypeScript worker:** `apps/worker-ts` consumes `echo.jobs` with `prefetch(1)`, downloads the S3 object to a private temporary file (`0o600`), invokes the configured provider (`OpenRouterTranscriber` defaulting to `openai/gpt-4o-mini-transcribe`, or `OpenAITranscriber` using `gpt-4o-transcribe`), cleans up the temporary file, publishes a confirmed result to `echo.results`, and acknowledges the job.
+- **Bounded retries & manual recovery:** Transient worker errors receive one delayed nack/requeue per delivery; retryable failure results are rescheduled by the API with backoff (`5s`, `10s`) up to 3 dispatch attempts before marking the recording `failed`. Users can explicitly retry failed transcriptions via `POST /api/recordings/{id}/retry` with `ExpectedRetryCount`.
+- **Progress tracking:** The review page (`/recordings/$recordingId`) polls every 3 seconds while a recording is `pending` or `transcribing`.
 
-## F3: Transcript Review & Editing
+### 4. Revisioned Transcript Editing
 
-### Description
+Once transcribed, `/recordings/$recordingId` renders `TranscriptEditor`:
 
-After transcription, users can review and edit the raw text before AI refinement. This is the "quality gate" — like a code review step in a CI/CD pipeline where you inspect the output and fix issues before promoting it to the next stage.
+- **Server-persisted edits:** Debounced auto-save (500 ms) writes to `PUT /api/recordings/{id}/transcript` with `{ Text, ExpectedRevision }` (max 200,000 characters).
+- **Optimistic concurrency:** `Recording.TranscriptRevision` is an EF Core concurrency token. Conflicting edits from another session return `409 Conflict`, while lost-response replays of an already-applied edit succeed idempotently.
+- **Editor features:** Up to 100-step undo/redo (`Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z`, `Ctrl/Cmd+Y`) with 600 ms coalescing, **Reset to original** (restores `transcribedText`), live word and character counts, and `localStorage` draft backup keyed by revision.
+- **Safe navigation:** Leaving the page flushes pending edits and blocks navigation if a save fails or conflicts.
 
-### Capabilities
+### 5. AI Refinement (4 Formats)
 
-- **Editable text area** displaying the full transcript
-- **Undo/redo** support for standard editing workflows
-- **Auto-save** to prevent data loss (debounced writes to local state or database)
-- **Character/word count** for content awareness
-- **Clear CTA** to proceed to format selection once review is complete
+From `/recordings/$recordingId/refine`, users transform the saved transcript revision into structured Markdown via `POST /api/recordings/{recordingId}/refinements`:
 
-### Technical Approach
+| Format | Key | Purpose |
+| --- | --- | --- |
+| **Blog Post** | `blog` | Structured article with introduction, headings, and conclusion preserving the author's voice. |
+| **Interview** | `interview` | Readable dialog preserving explicit speaker labels without inventing identities or quotations. |
+| **Notes** | `notes` | Concise topic-organized notes with headings, bullets, decisions, uncertainties, and action items. |
+| **News Brief** | `news` | Factual summary leading with key information, supporting details, and attribution. |
 
-The review screen renders the transcript in a controlled `<textarea>` or rich text component. Edit state is managed in React state with optional persistence to the database via a server function if the user is authenticated. Navigation guards warn users about unsaved changes.
+- **Provider adapter:** `ChatRefiner` (`apps/worker-ts/src/refinement/refiner.ts`) calls OpenAI-compatible `/chat/completions` using the configured provider credentials (`REFINEMENT_MODEL` defaults to `openai/gpt-4.1-mini` on OpenRouter or `gpt-4.1-mini` on OpenAI; overridable with `REFINEMENT_MODEL` and `REFINEMENT_BASE_URL`). System prompts treat transcripts as untrusted source text to resist prompt injection and track `PROMPT_VERSION`.
+- **Revision pinning & deduplication:** Refinement jobs capture a `SourceText` snapshot at `ExpectedRevision`. `RefinementRequest` deduplicates replays by `(recordingId, requestKey)` and reuses active or completed outputs for the same `(recordingId, transcriptRevision, format)` unless `regenerate: true` is requested.
+- **Automatic staleness isolation:** `GET /api/recordings/{recordingId}/refinements` returns only jobs matching the recording's current `TranscriptRevision`, so editing a transcript hides older outputs from the active view.
 
-### Acceptance Criteria
+### 6. Output Preview & Export
 
-- [ ] Transcript is fully editable after transcription completes
-- [ ] Undo and redo work correctly
-- [ ] Edits persist if the user navigates away and returns (authenticated users)
-- [ ] User can proceed to format selection from this screen
+- **Formatted preview:** Renders Markdown output in `OutputRenderer` with word count and saved-status metadata.
+- **Export actions:** One-click **Copy** to clipboard, **Download `.md`** (`<base>-<format>.md`), and **Regenerate** to create a fresh variation for the same format and revision.
+- **Saved Outputs view (`/outputs`):** Aggregates completed outputs for current transcript revisions across recordings (paged in client-side batches of 20 recordings) with direct links back to each refined piece.
 
----
+### 7. Library, History & System Info
 
-## F4: AI Refinement
-
-### Description
-
-AI refinement is Echo's core differentiator. It takes the reviewed transcript and transforms it into a polished output based on the user's chosen format. This is powered by Anthropic Claude, with each format using a specialized system prompt — similar to how you'd configure different middleware behaviors based on a route parameter or strategy pattern in C#.
-
-### Capabilities
-
-- **Four output formats** with distinct AI behavior:
-
-| Format | What it does | AI behavior |
-|--------|-------------|-------------|
-| **Blog Post** | Structures content as a publishable article with intro, body, and conclusion | Adds transitions, headings, improves flow; preserves the author's voice |
-| **Interview** | Formats as dialog/Q&A preserving each speaker's personality | Identifies speakers, removes filler words, structures as exchange |
-| **Notes** | Clean, organized capture of key points | Removes verbal noise, organizes by topic, adds minimal structure |
-| **News Brief** | Factual summary with clear highlights | Extracts key facts, uses inverted pyramid, adds bullet summaries |
-
-- **Format selection UI** — card-based picker with descriptions and icons
-- **Processing indicator** while Claude generates the output
-- **Re-processing** — users can switch formats and re-run refinement on the same transcript
-
-### Technical Approach
-
-A server function receives the transcript text and selected format type. It constructs the appropriate system prompt for Claude based on the format, sends the request to the Anthropic API, and streams or returns the refined output. Each format has a dedicated prompt template stored server-side.
-
-### Acceptance Criteria
-
-- [ ] User can select from four output formats
-- [ ] AI refinement produces well-structured output matching the selected format
-- [ ] Processing completes within a reasonable time (< 30 seconds for typical transcripts)
-- [ ] User can re-process with a different format without re-transcribing
-- [ ] API errors are handled gracefully with retry option
+- **Home library (`/`):** Displays a "Pick up where you left off" card for the newest transcribed recording, stage filter (`all`, `transcribed`, `pending`, `transcribing`, `failed`), client-side search by title/filename, newest-first ordering, and file size/stage metadata.
+- **About page (`/settings`):** Informational view summarizing live pipeline stages and server-side persistence.
 
 ---
 
-## F5: Output & Export
+## Planned Roadmap
 
-### Description
+These capabilities are intentionally outside the current private single-user milestone (see [ADR-0005](adr/0005-private-deployment-and-evolution-roadmap.md)):
 
-The final stage presents the polished text and gives users multiple ways to use it — copy, download, or go back and re-process with a different format.
-
-### Capabilities
-
-- **Formatted preview** displaying the refined output with appropriate styling (headings, paragraphs, bullet points depending on format)
-- **Copy to clipboard** — one-click copy of the final text
-- **Download** as `.txt` or `.md` file
-- **Re-process** — return to format selection to try a different output type
-- **Share** (future) — direct publishing to connected platforms
-
-### Acceptance Criteria
-
-- [ ] Final output renders with correct formatting for the selected type
-- [ ] Copy button copies text to clipboard and shows confirmation
-- [ ] Download produces a valid text or Markdown file
-- [ ] Re-process navigates back to format selection with the transcript preserved
+- **Audio Playback:** Replay the stored source audio in the browser while reviewing or editing a transcript.
+- **Title Editing:** Rename recordings via API and inline UI instead of defaulting to the uploaded filename.
+- **Custom Refinement Guidance:** Supply per-request instructions (tone, audience, length, structure) while keeping prompt versioning and replay safety.
+- **Full-Text Search & Server-Side Pagination:** Search across transcript text and refined outputs on the server, and return paginated summary DTOs from `GET /api/recordings` without shipping every full transcript body.
+- **Local AI Providers:** First-class support and automated verification for local speech-to-text and chat models alongside cloud providers.
+- **Authentication & Web Deployment:** User accounts, per-user ownership enforcement across all API routes, and a production web deployment topology before exposing Echo beyond a private network.
+- **Personal Blog Authoring Workflow:** Iterative editing, metadata/frontmatter support, and streamlined export from refined `blog` outputs.
 
 ---
 
-## F6: Authentication
+## Data Model (As Built)
 
-### Description
+The API owns SQLite (`apps/api/Echo.API/Database/EchoDbContext.cs`) with snake_case table/column names, time-ordered UUIDv7 primary keys (`Guid.CreateVersion7()`), and lowercase string enums:
 
-Authentication enables personalized experiences — saved recordings, transcript history, and preferences. Echo uses Better Auth, which can run stateless for quick setup or database-backed with PostgreSQL for full persistence.
+```text
+recordings
+├── id (PK, UUIDv7)
+├── title (nullable, max 200)
+├── status (pending | transcribing | transcribed | failed)
+├── file_name, file_size_bytes, content_type, storage_key
+├── transcribed_text, edited_text
+├── transcript_revision (optimistic concurrency token)
+├── upload_key (unique, max 36), upload_hash (SHA-256)
+└── created_at, updated_at
 
-### Capabilities
+transcription_jobs (1:1 with recordings, cascade delete)
+├── id (PK, UUIDv7), recording_id (unique FK → recordings)
+├── status (created | processing | completed | failed)
+├── retry_count, attempt_count, claim_token, next_attempt_at, failure_reason
+└── created_at, updated_at
 
-- **Email/password** sign-up and login
-- **Session management** with secure, HTTP-only cookies
-- **Protected routes** — recording, transcript, and output screens require authentication
-- **Guest mode** (future) — limited usage without an account
-- **OAuth** (future) — Google and GitHub social login
+refinement_jobs (N:1 with recordings, cascade delete)
+├── id (PK, UUIDv7), recording_id (FK → recordings)
+├── request_key (unique with recording_id), format (blog | interview | notes | news)
+├── transcript_revision, source_text
+├── status (created | processing | completed | failed)
+├── content, model, provider, prompt_version, failure_reason
+├── claim_token, attempt_count, next_attempt_at
+└── created_at, updated_at
 
-### Technical Approach
+refinement_requests (replay map, cascade delete with refinement_jobs)
+├── (recording_id, request_key) (composite PK)
+├── job_id (FK → refinement_jobs)
+└── format, transcript_revision, regenerate
 
-Better Auth is configured in `src/lib/auth.ts`. In stateless mode, it works without a database for rapid prototyping. Once PostgreSQL is connected, sessions and user records are persisted via Drizzle ORM. Route guards on protected pages check session validity and redirect to login if needed.
-
-### Acceptance Criteria
-
-- [ ] Users can sign up with email and password
-- [ ] Users can log in and maintain a session
-- [ ] Protected routes redirect unauthenticated users to login
-- [ ] Session cookies are secure and HTTP-only
-
----
-
-## F7: Dashboard & History
-
-### Description
-
-The dashboard is the landing page for authenticated users, showing their recent recordings and transcriptions, and providing a quick path to start a new one.
-
-### Capabilities
-
-- **Recent recordings list** with title, date, duration, and status
-- **Quick actions** — continue editing, view output, or delete
-- **New recording CTA** — prominent button to start the capture workflow
-- **Search/filter** (future) — find past recordings by keyword or date
-
-### Technical Approach
-
-The dashboard route uses a TanStack Router loader to fetch the user's recordings from PostgreSQL via Drizzle. Each recording entry links to the appropriate step in the workflow based on its current status (transcribed, reviewed, refined).
-
-### Acceptance Criteria
-
-- [ ] Authenticated users see their recent recordings on the dashboard
-- [ ] Each recording shows its current status in the pipeline
-- [ ] Users can resume a recording at the step where they left off
-- [ ] New recording button navigates to the capture screen
-
----
-
-## F8: Data Persistence
-
-### Description
-
-Data persistence stores recordings, transcripts, and outputs so users can return to their work across sessions. This layer is optional for MVP (the app works without a database in stateless mode) but required for the full experience.
-
-### Capabilities
-
-- **PostgreSQL** database via Drizzle ORM with type-safe queries
-- **Core entities:** User, Recording, Transcript, Output
-- **Relationship model:** User → many Recordings → one Transcript → many Outputs
-- **Migration management** via Better Auth CLI and Drizzle Kit
-
-### Data Model
-
+job_outbox (API transactional outbox)
+├── id (PK, UUIDv7)
+├── payload (serialized JobMessage JSON)
+└── created_at
 ```
-User
-├── id (primary key)
-├── email
-├── name
-└── createdAt
-
-Recording
-├── id (primary key)
-├── userId (foreign key → User)
-├── audioUrl
-├── duration
-├── status (recorded | transcribed | reviewed | refined)
-└── createdAt
-
-Transcript
-├── id (primary key)
-├── recordingId (foreign key → Recording)
-├── rawText
-├── editedText
-└── status (draft | reviewed)
-
-Output
-├── id (primary key)
-├── transcriptId (foreign key → Transcript)
-├── format (blog | interview | notes | news)
-├── content
-└── createdAt
-```
-
-### Acceptance Criteria
-
-- [ ] Database schema is created via migrations
-- [ ] CRUD operations work for all core entities
-- [ ] Data relationships are enforced at the database level
-- [ ] The app functions in stateless mode when no database is configured
-
----
-
-## Feature Priority Matrix
-
-| Feature | Priority | Milestone | Complexity |
-|---------|----------|-----------|------------|
-| F1: Audio Capture | Must Have | M2 | Medium |
-| F2: Transcription | Must Have | M3 | Medium |
-| F3: Review & Editing | Must Have | M3 | Low |
-| F4: AI Refinement | Must Have | M4 | High |
-| F5: Output & Export | Must Have | M5 | Low |
-| F6: Authentication | Must Have | M1 | Medium |
-| F7: Dashboard & History | Should Have | M5 | Medium |
-| F8: Data Persistence | Should Have | M1 | Medium |

@@ -63,6 +63,14 @@ refinement source revisions retain their existing optimistic concurrency semanti
 
 See [job queue protocol and upgrade procedure](docs/JOB-QUEUE.md).
 
+## Architecture Decisions
+
+Key design choices, reliability guarantees, and current-vs-planned capabilities are documented in:
+
+- [Architecture Decision Records](docs/adr/README.md) — why Echo uses single-owner SQLite + outbox + RabbitMQ, a polyglot .NET 10 API + TypeScript worker split, S3/SeaweedFS storage, idempotency/concurrency primitives, and a scoped private deployment milestone
+- [Features & Capability Matrix](docs/FEATURES.md) — as-built feature inventory (`Live` vs. `Planned`) and database schema overview
+- [Job Queue Protocol](docs/JOB-QUEUE.md) — RabbitMQ message contracts, retry bounds, and operational recovery rules
+
 ## Run with Docker Compose
 
 From the project root, create a local environment file:

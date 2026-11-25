@@ -1,5 +1,7 @@
 # Echo Current-State Assessment
 
+> **Historical Snapshot:** This assessment was written on **2026-08-23** against commit `3f48eb0` and the legacy Go worker/shared-SQLite prototype. It is preserved strictly as historical context and has been **superseded** by the current single-owner SQLite + RabbitMQ + TypeScript worker architecture. For the current system, see the [Architecture Decision Records](../docs/adr/README.md), [Job Queue Protocol](../docs/JOB-QUEUE.md), and [Features & Capability Matrix](../docs/FEATURES.md).
+
 **Assessed:** 2026-08-23  
 **Baseline commit:** `3f48eb0`  
 **Scope:** Current `main` working tree, including the substantial uncommitted changes under `apps/web/`
