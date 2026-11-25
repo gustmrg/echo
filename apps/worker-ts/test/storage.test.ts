@@ -79,7 +79,7 @@ describe('LocalFileStorage', () => {
     const root = createTemporaryRoot()
     const outsideRoot = createTemporaryRoot()
     writeFileSync(join(outsideRoot, 'audio.webm'), 'outside bytes')
-    symlinkSync(outsideRoot, join(root, 'escaped'), 'dir')
+    symlinkSync(outsideRoot, join(root, 'escaped'), process.platform === 'win32' ? 'junction' : 'dir')
     const storage = new LocalFileStorage(root)
 
     await assert.rejects(

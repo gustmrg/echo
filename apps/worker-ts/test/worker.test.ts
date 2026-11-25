@@ -25,8 +25,17 @@ for (const failure of [false, true]) {
   })
 }
 it('refines the message source without loading a database or audio', async () => {
-  const result = await processJob({ ...job, kind: 'refinement', source_text: 'source', format: 'notes' },
+  const result = await processJob({ ...job, kind: 'refinement', correlation_id: 'corr-refine-1', source_text: 'source', format: 'notes' },
     { async openReadStream() { throw new Error('must not open audio') } },
     { async transcribe() { throw new Error('must not transcribe') } }, refiner, new AbortController().signal)
   assert.equal(result.content, '# Notes'); assert.equal(result.prompt_version, '1')
+  assert.equal(result.correlation_id, 'corr-refine-1')
+})
+
+it('preserves correlation_id on completed transcription results when present', async () => {
+  const result = await processJob({ ...job, correlation_id: 'corr-transcribe-1' },
+    { async openReadStream() { return Readable.from('audio') } },
+    { async transcribe() { return 'hello' } }, refiner, new AbortController().signal)
+  assert.equal(result.transcription_text, 'hello')
+  assert.equal(result.correlation_id, 'corr-transcribe-1')
 })
