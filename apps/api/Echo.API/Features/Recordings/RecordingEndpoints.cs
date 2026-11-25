@@ -1,3 +1,5 @@
+using Echo.API.Features.Auth;
+
 namespace Echo.API.Features.Recordings;
 
 public static class RecordingEndpoints
@@ -5,7 +7,8 @@ public static class RecordingEndpoints
     public static IEndpointRouteBuilder MapRecordings(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("recordings")
-            .WithTags("Recordings");
+            .WithTags("Recordings")
+            .RequireAuthorization(AuthOptions.PolicyName);
 
         group.MapPost("/", CreateRecording.Handle)
             .WithName("CreateRecording")

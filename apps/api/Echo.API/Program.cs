@@ -1,7 +1,8 @@
 using Echo.API.Extensions;
+using Echo.API.Features.Auth;
 using Echo.API.Features.Recordings;
-using Scalar.AspNetCore;
 using Echo.API.Features.Refinements;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,8 +22,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 
 var api = app.MapGroup("api");
+api.MapAuth();
 api.MapRecordings();
 api.MapRefinements();
 
