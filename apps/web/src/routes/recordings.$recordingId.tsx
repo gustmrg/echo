@@ -46,6 +46,7 @@ export default function ReviewPage() {
     onSuccess: () => {
       clearRecordingStorage(recordingId)
       queryClient.invalidateQueries({ queryKey: ['recordings'] })
+      queryClient.invalidateQueries({ queryKey: ['outputs'] })
       queryClient.removeQueries({ queryKey: ['recordings', recordingId] })
       navigate({ to: '/', ignoreBlocker: true })
     },

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRecording } from '../api/recordings'
 import { FORMATS, FORMAT_LABELS } from '../lib/formats'
 import type { OutputFormat } from '../lib/formats'
@@ -20,6 +20,7 @@ import { createRefinement, getRefinements } from '../api/refinements'
 export default function RefinePage() {
   const { recordingId } = useParams({ from: '/recordings/$recordingId/refine' })
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { format: requestedFormat } = useSearch({
     from: '/recordings/$recordingId/refine',
   })
@@ -109,6 +110,7 @@ export default function RefinePage() {
         regenerate,
       )
       request.current = null
+      void queryClient.invalidateQueries({ queryKey: ['outputs'] })
       await jobs.refetch()
     } catch (error) {
       setRequestError(

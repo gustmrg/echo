@@ -15,7 +15,9 @@ test('upload recovery, real worker, durable review, refinement, and deletion', a
   await expect(page.getByRole('textbox', { name: 'Transcript' })).toHaveValue('A useful original transcript.', { timeout: 20000 })
   const detailUrl = page.url()
   const id = detailUrl.split('/').pop()!
-  expect((await (await page.request.get('/api/recordings')).json()).length).toBe(1)
+  const recordingsPage = await (await page.request.get('/api/recordings')).json()
+  expect(recordingsPage.items.length).toBe(1)
+  expect(recordingsPage.totalCount).toBe(1)
   await page.getByRole('textbox', { name: 'Transcript' }).fill('Reviewed text saved immediately before navigation.')
   await page.getByRole('button', { name: 'Refine with AI' }).click()
   await page.getByRole('button', { name: /^Notes/ }).click()

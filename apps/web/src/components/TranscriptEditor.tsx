@@ -21,6 +21,7 @@ export default function TranscriptEditor({ recordingId, original, editedText, re
   const [session] = useState(() => new TranscriptSession(editedText ?? original, revision, async (value, expected) => {
     const recording = await saveTranscript(recordingId, value, expected)
     queryClient.setQueryData(['recordings', recordingId], recording)
+    void queryClient.invalidateQueries({ queryKey: ['outputs'] })
     return recording.transcriptRevision
   }, readDraft(recordingId, revision)))
   const [text, updateText] = useState(session.text)
