@@ -5,16 +5,28 @@ Both transcription and refinement use `echo.jobs` and `echo.results` by default.
 
 Transcription job:
 ```json
-{"job_id":"<uuid>","claim_token":"<uuid>","kind":"transcription","file_key":"recordings/id/audio.wav","file_name":"audio.wav","content_type":"audio/wav"}
+{"job_id":"<uuid>","claim_token":"<uuid>","kind":"transcription","file_key":"recordings/id/audio.wav","file_name":"audio.wav","content_type":"audio/wav","correlation_id":"<optional-id>"}
 ```
 Refinement job:
 ```json
-{"job_id":"<uuid>","claim_token":"<uuid>","kind":"refinement","source_text":"Reviewed transcript","format":"notes"}
+{"job_id":"<uuid>","claim_token":"<uuid>","kind":"refinement","source_text":"Reviewed transcript","format":"notes","correlation_id":"<optional-id>"}
 ```
-Results preserve `job_id`, `claim_token`, and `kind` and carry `status`:
+Results preserve `job_id`, `claim_token`, `kind`, and (when present) `correlation_id`, and carry `status`:
 - `completed` transcription: `transcription_text`.
 - `completed` refinement: `content`, `model`, `provider`, `prompt_version`.
 - `failed`: `error` (sanitized) and `retryable`.
+
+## Correlation and health checks
+
+HTTP requests to the API accept an optional `X-Correlation-Id` header (1–64 characters matching `[A-Za-z0-9._:-]`). When absent or invalid, the API generates a new UUID, echoes it in the `X-Correlation-Id` response header, binds it to the request logging scope, and persists it on newly created or retried `transcription_jobs` and `refinement_jobs`.
+
+When dispatching jobs from `job_outbox`, the API includes the optional `correlation_id` field in the JSON payload and sets the AMQP `correlationId` message property. The worker accepts messages with or without `correlation_id` (falling back to AMQP `properties.correlationId`), emits job-scoped structured JSON telemetry (`Job started`, `Job completed`, `Job requeued after transient failure`, `Job failed` with `duration_ms`), and echoes `correlation_id` on both the `JobResult` payload and AMQP `correlationId` property.
+
+The API exposes two unauthenticated probe endpoints:
+- `GET /health/live` — liveness probe with no external dependency checks; always returns HTTP `200` with `{"status":"healthy"}`.
+- `GET /health/ready` — readiness probe running the `sqlite` (database connectivity) and `rabbitmq` (live broker connection state) checks; returns HTTP `200` when all checks pass or HTTP `503` when any check fails, with `{"status":"...","checks":{...}}`.
+
+Note: the API runtime image (`mcr.microsoft.com/dotnet/aspnet:10.0`) does not ship with `curl` or `wget`, so `docker-compose.yml` does not configure an in-container HTTP probe command for the `api` service; external orchestrators or reverse proxies can probe `/health/live` and `/health/ready` directly.
 
 The API atomically changes a pending job to processing and adds its message to
 `job_outbox`. Publishing runs outside that database transaction. After a broker
