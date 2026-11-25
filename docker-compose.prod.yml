@@ -1,9 +1,19 @@
 services:
+  web:
+    image: ${ECHO_WEB_IMAGE:-gustmrg/echo-web:latest}
+    depends_on: [api]
+    networks: [echo-network]
+    restart: unless-stopped
   api:
     image: ${ECHO_API_IMAGE:-gustmrg/echo-api:latest}
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      Auth__Enabled: "${AUTH_ENABLED:-true}"
+      Auth__Username: "${AUTH_USERNAME:-admin}"
+      Auth__Password: "${AUTH_PASSWORD:-}"
+      Auth__PasswordHash: "${AUTH_PASSWORD_HASH:-}"
+      Auth__DataProtectionKeysPath: "/data/keys"
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
       AWS_SESSION_TOKEN: "${AWS_SESSION_TOKEN:-}"
