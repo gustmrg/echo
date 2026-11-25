@@ -1,6 +1,7 @@
 using Echo.API.Database;
 using Echo.API.Entities;
 using Echo.API.Enums;
+using Echo.API.Features.Jobs;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,7 @@ public class CreateRecording
         IFormFile file, 
         IFileStorage fileStorage, 
         EchoDbContext dbContext,
+        IJobDispatcherSignal dispatcherSignal,
         ILogger<CreateRecording> logger,
         HttpRequest request,
         CancellationToken ct = default)
@@ -109,6 +111,8 @@ public class CreateRecording
             if (existing is not null) return Replay(existing, hash);
             return Results.Problem("Failed to save recording.");
         }
+
+        dispatcherSignal.Notify();
 
         return Results.Created($"/api/recordings/{record.Id}", RecordingResponse.FromRecording(record));
     }

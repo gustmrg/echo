@@ -17,13 +17,17 @@ public static class ServiceCollectionExtensions
         services.AddOptions<RabbitOptions>().Bind(configuration.GetSection("RabbitMQ"))
             .Validate(o => Uri.TryCreate(o.Url, UriKind.Absolute, out var uri) && uri.Scheme is "amqp" or "amqps", "RabbitMQ URL must be amqp(s).")
             .Validate(o => o.PollIntervalMs > 0 && !string.IsNullOrWhiteSpace(o.JobQueue) && !string.IsNullOrWhiteSpace(o.ResultQueue) && o.JobQueue != o.ResultQueue, "Invalid RabbitMQ queues or poll interval.")
+            .Validate(o => o.ProcessingTimeoutSeconds > 0, "RabbitMQ ProcessingTimeoutSeconds must be greater than zero.")
             .ValidateOnStart();
+        services.AddSingleton<IJobDispatcherSignal, JobDispatcherSignal>();
         services.AddHostedService<RabbitJobService>();
-        
-        services.AddDbContext<EchoDbContext>(options =>
+
+        services.AddSingleton<SqlitePragmaConnectionInterceptor>();
+        services.AddDbContext<EchoDbContext>((sp, options) =>
         {
             options.UseSqlite(configuration.GetConnectionString("DefaultConnection"))
-                .UseSnakeCaseNamingConvention();
+                .UseSnakeCaseNamingConvention()
+                .AddInterceptors(sp.GetRequiredService<SqlitePragmaConnectionInterceptor>());
         });
         
         return services;

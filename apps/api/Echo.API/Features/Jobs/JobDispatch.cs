@@ -9,6 +9,82 @@ namespace Echo.API.Features.Jobs;
 // moves each pending job into the outbox; RabbitMQ never participates in an HTTP transaction.
 public static class JobDispatch
 {
+    public const string ProcessingTimeoutFailureReason =
+        "Processing timed out before a worker result arrived. Check worker/broker health or retry.";
+
+    public static async Task<int> ReclaimStale(EchoDbContext db, TimeSpan processingTimeout, CancellationToken ct)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(processingTimeout, TimeSpan.Zero);
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var now = DateTime.UtcNow;
+        var cutoff = now - processingTimeout;
+
+        var staleTranscriptions = await db.TranscriptionJobs
+            .Include(j => j.Recording)
+            .Where(j => j.Status == JobStatus.Processing && (j.UpdatedAt ?? j.CreatedAt) <= cutoff)
+            .ToListAsync(ct);
+
+        foreach (var job in staleTranscriptions)
+        {
+            job.ClaimToken = null;
+            job.UpdatedAt = now;
+            job.RetryCount++;
+            job.Recording.UpdatedAt = now;
+
+            if (job.AttemptCount < 3)
+            {
+                job.Status = JobStatus.Created;
+                job.NextAttemptAt = now;
+                job.Recording.Status = RecordingStatus.Pending;
+            }
+            else
+            {
+                job.Status = JobStatus.Failed;
+                job.NextAttemptAt = null;
+                job.FailureReason = ProcessingTimeoutFailureReason;
+                job.Recording.Status = RecordingStatus.Failed;
+            }
+        }
+
+        var staleRefinements = await db.RefinementJobs
+            .Where(j => j.Status == JobStatus.Processing && (j.UpdatedAt ?? j.CreatedAt) <= cutoff)
+            .ToListAsync(ct);
+
+        foreach (var job in staleRefinements)
+        {
+            job.ClaimToken = null;
+            job.UpdatedAt = now;
+
+            if (job.AttemptCount < 3)
+            {
+                job.Status = JobStatus.Created;
+                job.NextAttemptAt = now;
+            }
+            else
+            {
+                job.Status = JobStatus.Failed;
+                job.NextAttemptAt = null;
+                job.FailureReason = ProcessingTimeoutFailureReason;
+            }
+        }
+
+        var total = staleTranscriptions.Count + staleRefinements.Count;
+        if (total > 0)
+        {
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+
+        return total;
+    }
+
+    public static async Task Prepare(EchoDbContext db, TimeSpan processingTimeout, CancellationToken ct)
+    {
+        await ReclaimStale(db, processingTimeout, ct);
+        await Prepare(db, ct);
+    }
+
     public static async Task Prepare(EchoDbContext db, CancellationToken ct)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
