@@ -1,0 +1,12 @@
+node_modules
+dist
+e2e
+scripts
+test
+test-results
+playwright-report
+.env
+.env.*
+*.log
+.git
+.gitignore
