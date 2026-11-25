@@ -11,6 +11,12 @@ public static class RefinementEndpoints
         group.MapGet("/", GetRefinements.Handle).WithName("ListRefinements")
             .WithSummary("List saved outputs and refinement progress for this transcript")
             .Produces<RefinementResponse[]>().Produces(404);
+        endpoints.MapGet("outputs", GetOutputs.Handle)
+            .WithTags("Outputs")
+            .WithName("ListOutputs")
+            .WithSummary("List completed outputs matching current transcript revisions")
+            .Produces<OutputsPageResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest);
         return endpoints;
     }
 }

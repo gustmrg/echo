@@ -1,3 +1,5 @@
+using Echo.API.Shared;
+
 namespace Echo.API.Features.Recordings;
 
 public static class RecordingEndpoints
@@ -20,8 +22,9 @@ public static class RecordingEndpoints
         group.MapGet("/", GetRecordings.Handle)
             .WithName("ListRecordings")
             .WithSummary("List recordings")
-            .WithDescription("Returns all available recording entries.")
-            .Produces(StatusCodes.Status200OK);
+            .WithDescription("Returns a paginated list of recording summaries with optional status and search filters.")
+            .Produces<PagedResponse<RecordingSummaryResponse>>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest);
 
         group.MapGet("{id:guid}", GetRecordingById.Handle)
             .WithName("GetRecordingById")
