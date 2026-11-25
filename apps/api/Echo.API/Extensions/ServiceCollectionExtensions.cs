@@ -1,3 +1,4 @@
+using Echo.API.Features.Health;
 using Echo.API.Features.Jobs;
 using Amazon;
 using Amazon.Runtime;
@@ -18,6 +19,7 @@ public static class ServiceCollectionExtensions
             .Validate(o => Uri.TryCreate(o.Url, UriKind.Absolute, out var uri) && uri.Scheme is "amqp" or "amqps", "RabbitMQ URL must be amqp(s).")
             .Validate(o => o.PollIntervalMs > 0 && !string.IsNullOrWhiteSpace(o.JobQueue) && !string.IsNullOrWhiteSpace(o.ResultQueue) && o.JobQueue != o.ResultQueue, "Invalid RabbitMQ queues or poll interval.")
             .ValidateOnStart();
+        services.AddSingleton<IRabbitHealthState, RabbitHealthState>();
         services.AddHostedService<RabbitJobService>();
         
         services.AddDbContext<EchoDbContext>(options =>
@@ -25,6 +27,10 @@ public static class ServiceCollectionExtensions
             options.UseSqlite(configuration.GetConnectionString("DefaultConnection"))
                 .UseSnakeCaseNamingConvention();
         });
+
+        services.AddHealthChecks()
+            .AddCheck<SqliteHealthCheck>("sqlite", tags: ["ready"])
+            .AddCheck<RabbitHealthCheck>("rabbitmq", tags: ["ready"]);
         
         return services;
     }

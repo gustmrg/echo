@@ -81,6 +81,7 @@ public class CreateRecording
         {
             Id = Guid.CreateVersion7(),
             RecordingId = recordingId,
+            CorrelationId = CorrelationId.NormalizeOrNull(request.HttpContext.TraceIdentifier),
         };
         
         dbContext.Add(transcriptionJob);

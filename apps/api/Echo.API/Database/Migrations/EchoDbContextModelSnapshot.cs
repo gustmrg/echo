@@ -112,6 +112,11 @@ namespace Echo.API.Database.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("content");
 
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("correlation_id");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
@@ -230,6 +235,11 @@ namespace Echo.API.Database.Migrations
                     b.Property<string>("ClaimToken")
                         .HasColumnType("TEXT")
                         .HasColumnName("claim_token");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("correlation_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT")

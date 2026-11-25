@@ -1,7 +1,9 @@
 using Echo.API.Extensions;
+using Echo.API.Features.Health;
 using Echo.API.Features.Recordings;
-using Scalar.AspNetCore;
 using Echo.API.Features.Refinements;
+using Echo.API.Shared;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +16,8 @@ var app = builder.Build();
 
 await app.ApplyMigrationsAsync();
 
+app.UseCorrelationId();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -21,6 +25,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.MapHealth();
 
 var api = app.MapGroup("api");
 api.MapRecordings();
