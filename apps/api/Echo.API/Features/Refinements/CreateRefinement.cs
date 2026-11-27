@@ -1,6 +1,7 @@
 using Echo.API.Database;
 using Echo.API.Entities;
 using Echo.API.Enums;
+using Echo.API.Features.Jobs;
 using Microsoft.EntityFrameworkCore;
 
 namespace Echo.API.Features.Refinements;
@@ -11,7 +12,7 @@ public sealed record CreateRefinementRequest(string Format, int ExpectedRevision
 public static class CreateRefinement
 {
     public static async Task<IResult> Handle(Guid recordingId, CreateRefinementRequest request,
-        EchoDbContext db, CancellationToken ct)
+        EchoDbContext db, IJobDispatcherSignal dispatcherSignal, CancellationToken ct)
     {
         if (request.Format is not ("blog" or "interview" or "notes" or "news") || request.RequestKey == Guid.Empty)
             return Results.BadRequest("Choose blog, interview, notes, or news and supply a request key.");
@@ -50,6 +51,8 @@ public static class CreateRefinement
         });
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+        if (existing is null)
+            dispatcherSignal.Notify();
         return Results.Accepted($"/api/recordings/{recordingId}/refinements", RefinementResponse.FromJob(job));
     }
 }

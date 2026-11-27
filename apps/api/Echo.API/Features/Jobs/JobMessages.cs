@@ -22,5 +22,6 @@ public sealed class RabbitOptions
     public string JobQueue { get; set; } = "echo.jobs";
     public string ResultQueue { get; set; } = "echo.results";
     public int PollIntervalMs { get; set; } = 1000;
+    public int ProcessingTimeoutSeconds { get; set; } = 600;
     public static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 }

@@ -93,4 +93,173 @@ public sealed class JobDispatchTests : IAsyncLifetime
         await Assert.ThrowsAsync<JsonException>(() => JobDispatch.Apply(db, new(message.JobId, message.ClaimToken, message.Kind, "completed"), default));
         Assert.Empty(await db.Recordings.ToListAsync());
     }
+
+    [Fact]
+    public async Task ReclaimStale_ReclaimsExpiredTranscriptionJob_RedispatchesWithNewClaimToken_AndIgnoresLateResult()
+    {
+        var recording = await Recording();
+        var first = await Dispatch();
+
+        recording.TranscriptionJob.UpdatedAt = DateTime.UtcNow.AddMinutes(-15);
+        await db.SaveChangesAsync();
+
+        var reclaimed = await JobDispatch.ReclaimStale(db, TimeSpan.FromMinutes(10), default);
+
+        Assert.Equal(1, reclaimed);
+        Assert.Equal(JobStatus.Created, recording.TranscriptionJob.Status);
+        Assert.Null(recording.TranscriptionJob.ClaimToken);
+        Assert.NotNull(recording.TranscriptionJob.NextAttemptAt);
+        Assert.Equal(1, recording.TranscriptionJob.RetryCount);
+        Assert.Equal(RecordingStatus.Pending, recording.Status);
+
+        var second = await Dispatch();
+        Assert.NotEqual(first.ClaimToken, second.ClaimToken);
+        Assert.Equal(2, recording.TranscriptionJob.AttemptCount);
+        Assert.Equal(JobStatus.Processing, recording.TranscriptionJob.Status);
+        Assert.Equal(RecordingStatus.Transcribing, recording.Status);
+
+        // Late zombie result carrying the old ClaimToken must be ignored.
+        await JobDispatch.Apply(db, new(first.JobId, first.ClaimToken, first.Kind, "completed", TranscriptionText: "zombie"), default);
+        Assert.Null(recording.TranscribedText);
+        Assert.Equal(JobStatus.Processing, recording.TranscriptionJob.Status);
+
+        // Fresh result carrying the new ClaimToken must succeed.
+        await JobDispatch.Apply(db, new(second.JobId, second.ClaimToken, second.Kind, "completed", TranscriptionText: "fresh"), default);
+        Assert.Equal("fresh", recording.TranscribedText);
+        Assert.Equal(JobStatus.Completed, recording.TranscriptionJob.Status);
+        Assert.Equal(RecordingStatus.Transcribed, recording.Status);
+    }
+
+    [Fact]
+    public async Task ReclaimStale_ReclaimsExpiredRefinementJob_RedispatchesWithNewClaimToken_AndIgnoresLateResult()
+    {
+        var recording = await Recording();
+        recording.TranscriptionJob.Status = JobStatus.Completed;
+        var job = new RefinementJob
+        {
+            Id = Guid.CreateVersion7(),
+            RecordingId = recording.Id,
+            SourceText = "reviewed transcript",
+            Format = "notes",
+            RequestKey = "refinement-stale-key",
+            TranscriptRevision = 1
+        };
+        db.RefinementJobs.Add(job);
+        await db.SaveChangesAsync();
+
+        var first = await Dispatch();
+
+        // Also exercise CreatedAt fallback when UpdatedAt is null.
+        job.UpdatedAt = null;
+        job.CreatedAt = DateTime.UtcNow.AddMinutes(-15);
+        await db.SaveChangesAsync();
+
+        var reclaimed = await JobDispatch.ReclaimStale(db, TimeSpan.FromMinutes(10), default);
+
+        Assert.Equal(1, reclaimed);
+        Assert.Equal(JobStatus.Created, job.Status);
+        Assert.Null(job.ClaimToken);
+        Assert.NotNull(job.NextAttemptAt);
+
+        var second = await Dispatch();
+        Assert.NotEqual(first.ClaimToken, second.ClaimToken);
+        Assert.Equal(2, job.AttemptCount);
+        Assert.Equal(JobStatus.Processing, job.Status);
+
+        await JobDispatch.Apply(db, new(first.JobId, first.ClaimToken, first.Kind, "completed",
+            Content: "stale", Model: "m", Provider: "p", PromptVersion: "1"), default);
+        Assert.Null(job.Content);
+        Assert.Equal(JobStatus.Processing, job.Status);
+
+        await JobDispatch.Apply(db, new(second.JobId, second.ClaimToken, second.Kind, "completed",
+            Content: "# Final Notes", Model: "m", Provider: "p", PromptVersion: "1"), default);
+        Assert.Equal(JobStatus.Completed, job.Status);
+        Assert.Equal("# Final Notes", job.Content);
+    }
+
+    [Fact]
+    public async Task ReclaimStale_MarksJobsFailed_WhenAttemptCountReachedLimit()
+    {
+        var recording = await Recording();
+        var transcriptionMessage = await Dispatch();
+        recording.TranscriptionJob.AttemptCount = 3;
+        recording.TranscriptionJob.UpdatedAt = DateTime.UtcNow.AddMinutes(-15);
+
+        var refinement = new RefinementJob
+        {
+            Id = Guid.CreateVersion7(),
+            RecordingId = recording.Id,
+            SourceText = "reviewed",
+            Format = "blog",
+            RequestKey = "refinement-max-attempts",
+            TranscriptRevision = 1,
+            Status = JobStatus.Processing,
+            ClaimToken = Guid.NewGuid().ToString(),
+            AttemptCount = 3,
+            UpdatedAt = DateTime.UtcNow.AddMinutes(-15)
+        };
+        db.RefinementJobs.Add(refinement);
+        await db.SaveChangesAsync();
+
+        var outboxBefore = await db.JobOutbox.CountAsync();
+        var reclaimed = await JobDispatch.ReclaimStale(db, TimeSpan.FromMinutes(10), default);
+
+        Assert.Equal(2, reclaimed);
+
+        Assert.Equal(JobStatus.Failed, recording.TranscriptionJob.Status);
+        Assert.Null(recording.TranscriptionJob.ClaimToken);
+        Assert.Null(recording.TranscriptionJob.NextAttemptAt);
+        Assert.Equal(JobDispatch.ProcessingTimeoutFailureReason, recording.TranscriptionJob.FailureReason);
+        Assert.Equal(1, recording.TranscriptionJob.RetryCount);
+        Assert.Equal(RecordingStatus.Failed, recording.Status);
+
+        Assert.Equal(JobStatus.Failed, refinement.Status);
+        Assert.Null(refinement.ClaimToken);
+        Assert.Null(refinement.NextAttemptAt);
+        Assert.Equal(JobDispatch.ProcessingTimeoutFailureReason, refinement.FailureReason);
+
+        // Late result after timeout failure must be ignored and Prepare must not re-enqueue failed jobs.
+        await JobDispatch.Apply(db, new(transcriptionMessage.JobId, transcriptionMessage.ClaimToken, transcriptionMessage.Kind, "completed", TranscriptionText: "late"), default);
+        Assert.Equal(JobStatus.Failed, recording.TranscriptionJob.Status);
+
+        await JobDispatch.Prepare(db, TimeSpan.FromMinutes(10), default);
+        Assert.Equal(outboxBefore, await db.JobOutbox.CountAsync());
+    }
+
+    [Fact]
+    public async Task ReclaimStale_DoesNotReclaimNonExpiredProcessingJobs()
+    {
+        var recording = await Recording();
+        var transcriptionMessage = await Dispatch();
+
+        var refinement = new RefinementJob
+        {
+            Id = Guid.CreateVersion7(),
+            RecordingId = recording.Id,
+            SourceText = "reviewed",
+            Format = "notes",
+            RequestKey = "refinement-active",
+            TranscriptRevision = 1
+        };
+        db.RefinementJobs.Add(refinement);
+        await db.SaveChangesAsync();
+
+        var refinementMessage = await Dispatch();
+        var outboxCount = await db.JobOutbox.CountAsync();
+
+        var reclaimed = await JobDispatch.ReclaimStale(db, TimeSpan.FromMinutes(10), default);
+
+        Assert.Equal(0, reclaimed);
+        Assert.Equal(JobStatus.Processing, recording.TranscriptionJob.Status);
+        Assert.Equal(transcriptionMessage.ClaimToken, recording.TranscriptionJob.ClaimToken);
+        Assert.Equal(1, recording.TranscriptionJob.AttemptCount);
+        Assert.Equal(0, recording.TranscriptionJob.RetryCount);
+
+        Assert.Equal(JobStatus.Processing, refinement.Status);
+        Assert.Equal(refinementMessage.ClaimToken, refinement.ClaimToken);
+        Assert.Equal(1, refinement.AttemptCount);
+
+        await JobDispatch.Prepare(db, TimeSpan.FromMinutes(10), default);
+        Assert.Equal(outboxCount, await db.JobOutbox.CountAsync());
+    }
 }
