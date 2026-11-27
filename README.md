@@ -39,9 +39,9 @@ implemented and validated.
 
 ## Current scope
 
-Echo currently targets private use. Authentication and ownership, production
-web hosting, and server-side pagination remain outside this milestone.
-Keep the deployment private until access control exists.
+Echo targets private single-user deployments. Session cookie authentication and
+a containerized Nginx web frontend are included for production; multi-user
+ownership and server-side pagination remain outside this milestone.
 
 ## Architecture
 
@@ -96,7 +96,32 @@ are for local development. Replace broker credentials/URL for production.
 
 Production uses `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`.
 This excludes the development override and SeaweedFS; configure the real S3 bucket
-and AWS credentials/role. The API should be exposed through your private reverse proxy.
+and AWS credentials/role.
+
+The production compose file adds the `web` service (`apps/web/Dockerfile`), an
+Nginx container that serves the built SPA and reverse-proxies `/api/` requests
+(up to 30 MB uploads) to `http://api:8080`. Expose the `web` service behind your
+TLS-terminating reverse proxy.
+
+### Authentication
+
+Single-user session cookie authentication is disabled in local development
+(`Auth:Enabled=false`) and enabled by default in `docker-compose.prod.yml`
+(`AUTH_ENABLED=true`).
+
+Configure credentials in `.env` before starting production:
+
+- `AUTH_ENABLED` — set to `true` (default in `docker-compose.prod.yml`) to gate `/api/recordings` and `/api/refinements`
+- `AUTH_USERNAME` — sign-in username (defaults to `admin`)
+- `AUTH_PASSWORD_HASH` — preferred PBKDF2-SHA256 hash (`pbkdf2-sha256$<iterations>$<saltBase64>$<hashBase64>`)
+- `AUTH_PASSWORD` — plaintext fallback when `AUTH_PASSWORD_HASH` is unset
+
+Sessions are issued via `/api/auth/login` as `HttpOnly`, `SameSite=Lax` cookies
+(`echo.session`, `Secure` by default in Production, sliding 7-day expiry via
+`Auth:SessionHours`). In production Compose, ASP.NET Core DataProtection keys
+are persisted to `/data/keys` on the API's `appdata` volume so sessions survive
+container restarts. Use `/api/auth/status` to inspect session state and
+`/api/auth/logout` to sign out.
 
 Useful commands:
 

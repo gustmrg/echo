@@ -1,10 +1,14 @@
+using Echo.API.Features.Auth;
+
 namespace Echo.API.Features.Refinements;
 
 public static class RefinementEndpoints
 {
     public static IEndpointRouteBuilder MapRefinements(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("recordings/{recordingId:guid}/refinements").WithTags("Refinements");
+        var group = endpoints.MapGroup("recordings/{recordingId:guid}/refinements")
+            .WithTags("Refinements")
+            .RequireAuthorization(AuthOptions.PolicyName);
         group.MapPost("/", CreateRefinement.Handle).WithName("CreateRefinement")
             .WithSummary("Queue refinement of a saved transcript revision")
             .Produces<RefinementResponse>(202).Produces(400).Produces(404).Produces(409);
