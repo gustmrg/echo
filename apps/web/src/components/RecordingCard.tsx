@@ -1,10 +1,14 @@
 import { Link } from '@tanstack/react-router'
-import type { Recording } from '../api/recordings'
+import type { RecordingSummary } from '../api/recordings'
 import StatusBadge from './StatusBadge'
 import { IconMic } from './ui'
 import { formatBytes, formatContentType } from '../lib/format'
 
-export default function RecordingCard({ recording }: { recording: Recording }) {
+export default function RecordingCard({
+  recording,
+}: {
+  recording: RecordingSummary
+}) {
   return (
     <Link
       to="/recordings/$recordingId"

@@ -1,6 +1,6 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { recordingsQuery, newestFirst } from '../lib/recording-query'
+import { recordingsQuery } from '../lib/recording-query'
 import Brand from './Brand'
 import { IconMic, IconHome, IconCopy, IconSettings } from './ui'
 
@@ -9,8 +9,9 @@ export default function Layout() {
     select: (state) => state.location.pathname,
   })
   const { data } = useQuery(recordingsQuery)
-  const recent = newestFirst(data).slice(0, 3)
-  const current = data?.find((recording) => pathname.includes(recording.id))
+  const items = data?.items ?? []
+  const recent = items.slice(0, 3)
+  const current = items.find((recording) => pathname.includes(recording.id))
   const breadcrumb = current
     ? (current.title ?? current.fileName)
     : pathname === '/record'
@@ -40,7 +41,8 @@ export default function Layout() {
             activeProps={{ className: 'active' }}
           >
             <IconHome size={17} />
-            Recordings{data && <span className="nav-count">{data.length}</span>}
+            Recordings
+            {data && <span className="nav-count">{data.totalCount}</span>}
           </Link>
           <Link to="/outputs" activeProps={{ className: 'active' }}>
             <IconCopy size={17} />

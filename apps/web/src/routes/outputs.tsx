@@ -1,45 +1,27 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { queryOptions, useQueries, useQuery } from '@tanstack/react-query'
-import { getRefinements } from '../api/refinements'
-import { newestFirst, recordingsQuery } from '../lib/recording-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { getOutputs } from '../api/refinements'
 import { FORMAT_LABELS } from '../lib/formats'
 import { Button, Spinner } from '../components/ui'
 
+const OUTPUTS_PAGE_SIZE = 20
+
 export default function OutputsPage() {
   const [page, setPage] = useState(0)
-  const recordings = useQuery(recordingsQuery)
-  const candidates = newestFirst(recordings.data).filter(
-    (r) => r.status === 'transcribed',
-  )
-  const pages = Math.max(1, Math.ceil(candidates.length / 20))
-  const currentPage = Math.min(page, pages - 1)
-  const visible = candidates.slice(currentPage * 20, (currentPage + 1) * 20)
-  const queries = useQueries({
-    queries: visible.map((r) =>
-      queryOptions({
-        queryKey: ['refinements', r.id],
-        queryFn: () => getRefinements(r.id),
-        refetchInterval: (query) =>
-          query.state.data?.some(
-            (job) => job.status === 'created' || job.status === 'processing',
-          )
-            ? 1000
-            : false,
-      }),
-    ),
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['outputs', { page: page + 1, pageSize: OUTPUTS_PAGE_SIZE }],
+    queryFn: () => getOutputs({ page: page + 1, pageSize: OUTPUTS_PAGE_SIZE }),
+    placeholderData: keepPreviousData,
+    refetchInterval: (query) =>
+      query.state.data?.hasActiveJobs ? 1000 : false,
   })
-  const outputs = queries.flatMap((query, index) =>
-    (query.data ?? [])
-      .filter(
-        (j) =>
-          j.status === 'completed' &&
-          j.transcriptRevision === visible[index].transcriptRevision,
-      )
-      .map((job) => ({ job, recording: visible[index] })),
-  )
-  const loading = recordings.isLoading || queries.some((q) => q.isLoading)
-  const failed = recordings.isError || queries.some((q) => q.isError)
+
+  const outputs = data?.items ?? []
+  const totalCount = data?.totalCount ?? 0
+  const hasMore = data?.hasMore ?? false
+  const pages = Math.max(1, Math.ceil(totalCount / OUTPUTS_PAGE_SIZE))
+
   return (
     <div className="studio-page">
       <header className="document-heading">
@@ -52,48 +34,42 @@ export default function OutputsPage() {
           </p>
         </div>
       </header>
-      {loading && (
+      {isLoading && (
         <div className="document-message" role="status">
           <Spinner />
           Loading outputs…
         </div>
       )}
-      {failed && (
+      {isError && (
         <div className="document-message" role="alert">
           <p>Some outputs could not be loaded.</p>
-          <Button
-            onClick={() => {
-              void recordings.refetch()
-              queries.forEach((q) => {
-                if (q.isError) void q.refetch()
-              })
-            }}
-          >
-            Try again
-          </Button>
+          <Button onClick={() => void refetch()}>Try again</Button>
         </div>
       )}
-      {outputs.map(({ job, recording }) => (
+      {outputs.map((output) => (
         <Link
-          key={job.id}
+          key={output.id}
           to="/recordings/$recordingId/refine"
-          params={{ recordingId: recording.id }}
-          search={{ format: job.format }}
+          params={{ recordingId: output.recordingId }}
+          search={{ format: output.format }}
           className="recording-row"
         >
           <span className="recording-title">
             <span>
-              <strong>{recording.title ?? recording.fileName}</strong>
-              <small>{FORMAT_LABELS[job.format]}</small>
+              <strong>
+                {output.recordingTitle ?? output.recordingFileName}
+              </strong>
+              <small>{FORMAT_LABELS[output.format]}</small>
             </span>
           </span>
           <span className="recording-size">
-            {job.content?.trim().split(/\s+/).length ?? 0} words
+            {output.wordCount.toLocaleString()}{' '}
+            {output.wordCount === 1 ? 'word' : 'words'}
           </span>
           <span className="text-success text-xs">Open →</span>
         </Link>
       ))}
-      {!loading && !failed && outputs.length === 0 && (
+      {!isLoading && !isError && outputs.length === 0 && (
         <div className="empty-message">
           <h2>No outputs here yet.</h2>
           <p>
@@ -107,21 +83,21 @@ export default function OutputsPage() {
       <footer className="library-footer">
         <span>
           Outputs from current transcript versions
-          {pages > 1 ? ` · Recordings page ${currentPage + 1} of ${pages}` : ''}
+          {pages > 1 ? ` · Page ${page + 1} of ${pages}` : ''}
         </span>
         {pages > 1 && (
           <div className="document-actions">
             <Button
               variant="ghost"
-              disabled={currentPage === 0}
-              onClick={() => setPage(currentPage - 1)}
+              disabled={page === 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
             >
               Previous
             </Button>
             <Button
               variant="ghost"
-              disabled={currentPage + 1 >= pages}
-              onClick={() => setPage(currentPage + 1)}
+              disabled={!hasMore}
+              onClick={() => setPage((p) => p + 1)}
             >
               Next
             </Button>

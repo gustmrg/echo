@@ -1,22 +1,52 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { recordingsQuery, newestFirst } from '../lib/recording-query'
+import type { RecordingStatus } from '../api/recordings'
+import {
+  RECORDINGS_PAGE_SIZE,
+  recordingsListQuery,
+  recordingsQuery,
+} from '../lib/recording-query'
 import RecordingCard from '../components/RecordingCard'
 import Waveform from '../components/Waveform'
 import { Button, IconMic } from '../components/ui'
 
+type StageFilter = 'all' | RecordingStatus
+
 export default function HomePage() {
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('all')
-  const { data, isLoading, isError, refetch } = useQuery(recordingsQuery)
-  const recordings = newestFirst(data)
-  const featured = recordings.find((r) => r.status === 'transcribed')
-  const filtered = recordings.filter(
-    (r) =>
-      (filter === 'all' || r.status === filter) &&
-      (r.title ?? r.fileName).toLowerCase().includes(search.toLowerCase()),
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [filter, setFilter] = useState<StageFilter>('all')
+  const [page, setPage] = useState(1)
+
+  useEffect(() => {
+    const trimmed = search.trim()
+    const timer = setTimeout(
+      () => setDebouncedSearch(trimmed),
+      trimmed ? 150 : 0,
+    )
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const defaultRecordings = useQuery(recordingsQuery)
+  const { data, isLoading, isError, refetch } = useQuery({
+    ...recordingsListQuery({
+      page,
+      pageSize: RECORDINGS_PAGE_SIZE,
+      status: filter === 'all' ? undefined : filter,
+      q: debouncedSearch || undefined,
+    }),
+    placeholderData: keepPreviousData,
+  })
+
+  const recordings = data?.items ?? []
+  const totalCount = data?.totalCount ?? 0
+  const hasMore = data?.hasMore ?? false
+  const totalPages = Math.max(1, Math.ceil(totalCount / RECORDINGS_PAGE_SIZE))
+  const featured = defaultRecordings.data?.items.find(
+    (r) => r.status === 'transcribed',
   )
+  const hasActiveFilter = Boolean(debouncedSearch) || filter !== 'all'
 
   return (
     <section className="studio-page">
@@ -63,12 +93,18 @@ export default function HomePage() {
           aria-label="Search recordings"
           placeholder="Find a thought"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            setPage(1)
+          }}
         />
         <select
           aria-label="Filter recordings"
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={(e) => {
+            setFilter(e.target.value as StageFilter)
+            setPage(1)
+          }}
         >
           <option value="all">All stages</option>
           <option value="transcribed">To review</option>
@@ -95,35 +131,54 @@ export default function HomePage() {
           </Button>
         </div>
       )}
-      {!isLoading && !isError && !filtered.length && (
+      {!isLoading && !isError && !recordings.length && (
         <div className="empty-message">
           <h2>
-            {search || filter !== 'all'
+            {hasActiveFilter
               ? 'No matching thoughts.'
               : 'Your first thought belongs here.'}
           </h2>
           <p>
-            {search || filter !== 'all'
+            {hasActiveFilter
               ? 'Try another title or stage.'
               : 'Record a voice note or import audio to get started.'}
           </p>
-          {!search && filter === 'all' && (
+          {!hasActiveFilter && (
             <Link to="/record" className="echo-button primary">
               New recording
             </Link>
           )}
         </div>
       )}
-      {filtered.map((recording) => (
+      {recordings.map((recording) => (
         <RecordingCard key={recording.id} recording={recording} />
       ))}
       {!isLoading && !isError && (
         <footer className="library-footer">
           <span>
-            {filtered.length}{' '}
-            {filtered.length === 1 ? 'recording' : 'recordings'}
+            {totalCount} {totalCount === 1 ? 'recording' : 'recordings'}
+            {totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ''}
           </span>
-          <span>Small thoughts. Worth keeping.</span>
+          {totalPages > 1 ? (
+            <div className="document-actions">
+              <Button
+                variant="ghost"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={!hasMore}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          ) : (
+            <span>Small thoughts. Worth keeping.</span>
+          )}
         </footer>
       )}
     </section>

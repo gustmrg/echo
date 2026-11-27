@@ -8,18 +8,25 @@ for (const mobile of [false, true]) {
       mobile ? { width: 360, height: 800 } : { width: 1280, height: 900 },
     )
     await page.emulateMedia({ colorScheme: mobile ? 'dark' : 'light' })
-    const recording = {
+    const recordingSummary = {
       id: 'design-fixture',
       title: 'A slower, more thoughtful way to work',
       fileName: 'thoughts.webm',
       fileSizeBytes: 2000000,
       contentType: 'audio/webm',
       createdAt: '2026-09-04T12:00:00Z',
+      updatedAt: null,
       status: 'transcribed',
+      transcriptRevision: 0,
+      failureReason: null,
+      attemptCount: 1,
+      retryCount: 0,
+    }
+    const recording = {
+      ...recordingSummary,
       transcribedText:
         'I keep coming back to the same idea: make room for the work that matters.\n\nA little space to think can change the shape of an entire day.',
       editedText: null,
-      transcriptRevision: 0,
     }
     await page.route(/\/api\/recordings(?:\/|\?|$)/, (route) => {
       const path = new URL(route.request().url()).pathname
@@ -38,9 +45,40 @@ for (const mobile of [false, true]) {
             ]
           : path.endsWith('/design-fixture')
             ? recording
-            : [recording],
+            : {
+                items: [recordingSummary],
+                page: 1,
+                pageSize: 20,
+                totalCount: 1,
+                hasMore: false,
+              },
       })
     })
+    await page.route(/\/api\/outputs(?:\?|$)/, (route) =>
+      route.fulfill({
+        json: {
+          items: [
+            {
+              id: 'output-fixture',
+              recordingId: 'design-fixture',
+              recordingTitle: recording.title,
+              recordingFileName: recording.fileName,
+              format: 'notes',
+              transcriptRevision: 0,
+              wordCount: 12,
+              model: null,
+              provider: null,
+              createdAt: '2026-09-04T12:05:00Z',
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          totalCount: 1,
+          hasMore: false,
+          hasActiveJobs: false,
+        },
+      }),
+    )
     async function checkLayout(name: string) {
       await expect(page.locator('main')).toBeVisible()
       expect(
@@ -96,39 +134,72 @@ for (const mobile of [false, true]) {
 test('saved outputs updates when a queued refinement completes', async ({
   page,
 }) => {
-  let requests = 0
-  await page.route(/\/api\/recordings(?:\/|\?|$)/, (route) => {
-    const path = new URL(route.request().url()).pathname
-    if (path.endsWith('/refinements')) {
-      requests++
-      return route.fulfill({
-        json: [
+  let outputRequests = 0
+  await page.route(/\/api\/recordings(?:\/|\?|$)/, (route) =>
+    route.fulfill({
+      json: {
+        items: [
           {
-            id: 'queued-output',
-            format: 'notes',
+            id: 'queued-recording',
+            title: 'A thought in progress',
+            fileName: 'thought.webm',
+            fileSizeBytes: 1024,
+            contentType: 'audio/webm',
+            status: 'transcribed',
             transcriptRevision: 0,
-            status: requests === 1 ? 'processing' : 'completed',
-            content: requests === 1 ? null : 'Finished notes.',
             failureReason: null,
+            attemptCount: 1,
+            retryCount: 0,
+            createdAt: '2026-09-04T12:00:00Z',
+            updatedAt: null,
           },
         ],
-      })
-    }
+        page: 1,
+        pageSize: 20,
+        totalCount: 1,
+        hasMore: false,
+      },
+    }),
+  )
+  await page.route(/\/api\/outputs(?:\?|$)/, (route) => {
+    outputRequests++
     return route.fulfill({
-      json: [
-        {
-          id: 'queued-recording',
-          title: 'A thought in progress',
-          status: 'transcribed',
-          transcriptRevision: 0,
-          createdAt: '2026-09-04T12:00:00Z',
-        },
-      ],
+      json:
+        outputRequests === 1
+          ? {
+              items: [],
+              page: 1,
+              pageSize: 20,
+              totalCount: 0,
+              hasMore: false,
+              hasActiveJobs: true,
+            }
+          : {
+              items: [
+                {
+                  id: 'queued-output',
+                  recordingId: 'queued-recording',
+                  recordingTitle: 'A thought in progress',
+                  recordingFileName: 'thought.webm',
+                  format: 'notes',
+                  transcriptRevision: 0,
+                  wordCount: 2,
+                  model: null,
+                  provider: null,
+                  createdAt: '2026-09-04T12:05:00Z',
+                },
+              ],
+              page: 1,
+              pageSize: 20,
+              totalCount: 1,
+              hasMore: false,
+              hasActiveJobs: false,
+            },
     })
   })
   await page.goto('/outputs')
   await expect(
     page.locator('main').getByRole('link', { name: /A thought in progress/ }),
   ).toBeVisible()
-  expect(requests).toBeGreaterThan(1)
+  expect(outputRequests).toBeGreaterThan(1)
 })

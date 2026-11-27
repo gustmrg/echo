@@ -37,3 +37,17 @@ internal sealed record RecordingResponse(
             recording.UpdatedAt);
     }
 }
+
+public sealed record RecordingSummaryResponse(
+    Guid Id,
+    string? Title,
+    string Status,
+    string FileName,
+    long FileSizeBytes,
+    string? ContentType,
+    int TranscriptRevision,
+    string? FailureReason,
+    int AttemptCount,
+    int RetryCount,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt);

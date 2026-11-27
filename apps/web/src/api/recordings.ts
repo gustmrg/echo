@@ -2,15 +2,13 @@ import { apiFetch } from './client'
 
 export type RecordingStatus = 'pending' | 'transcribing' | 'transcribed' | 'failed'
 
-export interface Recording {
+export interface RecordingSummary {
   id: string
   title: string | null
   status: RecordingStatus
   fileName: string
   fileSizeBytes: number
   contentType: string | null
-  transcribedText: string | null
-  editedText: string | null
   transcriptRevision: number
   failureReason: string | null
   attemptCount: number
@@ -19,8 +17,39 @@ export interface Recording {
   updatedAt: string | null
 }
 
-export function getRecordings(): Promise<Recording[]> {
-  return apiFetch<Recording[]>('/recordings')
+export interface Recording extends RecordingSummary {
+  transcribedText: string | null
+  editedText: string | null
+}
+
+export interface PagedResponse<T> {
+  items: T[]
+  page: number
+  pageSize: number
+  totalCount: number
+  hasMore: boolean
+}
+
+export interface GetRecordingsParams {
+  page?: number
+  pageSize?: number
+  status?: RecordingStatus
+  q?: string
+}
+
+export function getRecordings(
+  params?: GetRecordingsParams,
+): Promise<PagedResponse<RecordingSummary>> {
+  const search = new URLSearchParams()
+  if (params?.page !== undefined) search.set('page', String(params.page))
+  if (params?.pageSize !== undefined)
+    search.set('pageSize', String(params.pageSize))
+  if (params?.status) search.set('status', params.status)
+  if (params?.q?.trim()) search.set('q', params.q.trim())
+  const qs = search.toString()
+  return apiFetch<PagedResponse<RecordingSummary>>(
+    qs ? `/recordings?${qs}` : '/recordings',
+  )
 }
 
 export function getRecording(id: string): Promise<Recording> {
