@@ -4,10 +4,11 @@ namespace Echo.API.Features.Jobs;
 
 public sealed record JobMessage(string JobId, string ClaimToken, string Kind,
     string? FileKey = null, string? FileName = null, string? ContentType = null,
-    string? SourceText = null, string? Format = null);
+    string? SourceText = null, string? Format = null, string? CorrelationId = null);
 public sealed record JobResult(string JobId, string ClaimToken, string Kind, string Status,
     string? TranscriptionText = null, string? Error = null, bool Retryable = false,
-    string? Content = null, string? Model = null, string? Provider = null, string? PromptVersion = null);
+    string? Content = null, string? Model = null, string? Provider = null, string? PromptVersion = null,
+    string? CorrelationId = null);
 
 public sealed class JobOutbox
 {

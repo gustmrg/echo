@@ -26,7 +26,8 @@ public static class JobDispatch
             job.Recording.Status = RecordingStatus.Transcribing;
             job.Recording.UpdatedAt = now;
             Add(db, new(job.Id.ToString(), job.ClaimToken, "transcription",
-                job.Recording.StorageKey, job.Recording.FileName, job.Recording.ContentType));
+                job.Recording.StorageKey, job.Recording.FileName, job.Recording.ContentType,
+                CorrelationId: job.CorrelationId));
         }
         var refinements = await db.RefinementJobs
             .Where(j => j.Status == JobStatus.Created && (j.NextAttemptAt == null || j.NextAttemptAt <= now))
@@ -38,7 +39,8 @@ public static class JobDispatch
             job.AttemptCount++;
             job.UpdatedAt = now;
             job.NextAttemptAt = null;
-            Add(db, new(job.Id.ToString(), job.ClaimToken, "refinement", SourceText: job.SourceText, Format: job.Format));
+            Add(db, new(job.Id.ToString(), job.ClaimToken, "refinement",
+                SourceText: job.SourceText, Format: job.Format, CorrelationId: job.CorrelationId));
         }
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
@@ -49,7 +51,7 @@ public static class JobDispatch
         Id = Guid.CreateVersion7(), Payload = JsonSerializer.Serialize(message, RabbitOptions.Json)
     });
 
-    public static async Task Apply(EchoDbContext db, JobResult result, CancellationToken ct)
+    public static async Task Apply(EchoDbContext db, JobResult result, CancellationToken ct, ILogger? logger = null)
     {
         if (!Guid.TryParse(result.JobId, out var id) || !Guid.TryParse(result.ClaimToken, out _) ||
             result.Kind is not ("transcription" or "refinement") || result.Status is not ("completed" or "failed") ||
@@ -60,10 +62,18 @@ public static class JobDispatch
             throw new JsonException("Invalid job result");
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var now = DateTime.UtcNow;
+        string? effectiveCorrelationId;
+        JobStatus appliedStatus;
         if (result.Kind == "transcription")
         {
             var job = await db.TranscriptionJobs.Include(j => j.Recording).SingleOrDefaultAsync(j => j.Id == id, ct);
-            if (job is null || job.Status != JobStatus.Processing || job.ClaimToken != result.ClaimToken) return;
+            if (job is null || job.Status != JobStatus.Processing || job.ClaimToken != result.ClaimToken)
+            {
+                logger?.LogDebug(
+                    "Ignored stale or duplicate job result for JobId={JobId} Kind={Kind} Status={Status} CorrelationId={CorrelationId}",
+                    result.JobId, result.Kind, result.Status, result.CorrelationId ?? job?.CorrelationId);
+                return;
+            }
             var retry = result.Status == "failed" && result.Retryable && job.AttemptCount < 3;
             job.Status = result.Status == "completed" ? JobStatus.Completed : retry ? JobStatus.Created : JobStatus.Failed;
             job.ClaimToken = null;
@@ -79,11 +89,19 @@ public static class JobDispatch
                 job.Recording.TranscriptRevision++;
             }
             else job.RetryCount++;
+            effectiveCorrelationId = result.CorrelationId ?? job.CorrelationId;
+            appliedStatus = job.Status;
         }
         else
         {
             var job = await db.RefinementJobs.SingleOrDefaultAsync(j => j.Id == id, ct);
-            if (job is null || job.Status != JobStatus.Processing || job.ClaimToken != result.ClaimToken) return;
+            if (job is null || job.Status != JobStatus.Processing || job.ClaimToken != result.ClaimToken)
+            {
+                logger?.LogDebug(
+                    "Ignored stale or duplicate job result for JobId={JobId} Kind={Kind} Status={Status} CorrelationId={CorrelationId}",
+                    result.JobId, result.Kind, result.Status, result.CorrelationId ?? job?.CorrelationId);
+                return;
+            }
             var retry = result.Status == "failed" && result.Retryable && job.AttemptCount < 3;
             job.Status = result.Status == "completed" ? JobStatus.Completed : retry ? JobStatus.Created : JobStatus.Failed;
             job.ClaimToken = null;
@@ -95,8 +113,13 @@ public static class JobDispatch
                 job.Content = result.Content; job.Model = result.Model;
                 job.Provider = result.Provider; job.PromptVersion = result.PromptVersion;
             }
+            effectiveCorrelationId = result.CorrelationId ?? job.CorrelationId;
+            appliedStatus = job.Status;
         }
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+        logger?.LogInformation(
+            "Applied job result for JobId={JobId} Kind={Kind} Status={Status} CorrelationId={CorrelationId}",
+            id, result.Kind, appliedStatus, effectiveCorrelationId);
     }
 }

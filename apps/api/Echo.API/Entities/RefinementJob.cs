@@ -17,6 +17,7 @@ public class RefinementJob
     public string? PromptVersion { get; set; }
     public string? FailureReason { get; set; }
     public string? ClaimToken { get; set; }
+    public string? CorrelationId { get; set; }
     public int AttemptCount { get; set; }
     public DateTime? NextAttemptAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

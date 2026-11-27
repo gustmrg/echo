@@ -96,6 +96,9 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
             entity.Property(transcriptionJob => transcriptionJob.FailureReason)
                 .HasMaxLength(2048);
 
+            entity.Property(transcriptionJob => transcriptionJob.CorrelationId)
+                .HasMaxLength(64);
+
             entity.HasOne(transcriptionJob => transcriptionJob.Recording)
                 .WithOne(recording => recording.TranscriptionJob)
                 .HasForeignKey<TranscriptionJob>(transcriptionJob => transcriptionJob.RecordingId)
@@ -109,6 +112,7 @@ public class EchoDbContext(DbContextOptions<EchoDbContext> options) : DbContext(
             entity.Property(job => job.Id).ValueGeneratedNever();
             entity.Property(job => job.Status).HasConversion(
                 v => v.ToString().ToLowerInvariant(), v => Enum.Parse<JobStatus>(v, true));
+            entity.Property(job => job.CorrelationId).HasMaxLength(64);
             entity.HasIndex(job => new { job.RecordingId, job.RequestKey }).IsUnique();
             entity.HasIndex(job => new { job.RecordingId, job.TranscriptRevision, job.Format });
             entity.HasOne(job => job.Recording).WithMany().HasForeignKey(job => job.RecordingId)

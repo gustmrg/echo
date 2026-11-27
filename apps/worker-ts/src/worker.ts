@@ -10,7 +10,12 @@ import type { Refiner } from './refinement/refiner.js'
 
 export async function processJob(job: JobMessage, storage: FileStorage, transcriber: Transcriber,
   refiner: Refiner, signal: AbortSignal): Promise<JobResult> {
-  const identity = { job_id: job.job_id, claim_token: job.claim_token, kind: job.kind }
+  const identity = {
+    job_id: job.job_id,
+    claim_token: job.claim_token,
+    kind: job.kind,
+    ...(job.correlation_id ? { correlation_id: job.correlation_id } : {}),
+  }
   if (job.kind === 'refinement') {
     const result = await refiner.refine(job.source_text!, job.format!, signal)
     signal.throwIfAborted()

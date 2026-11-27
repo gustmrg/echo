@@ -5,34 +5,75 @@ import type { Logger } from '../logging/logger.js'
 import { parseJob, type JobResult, type JobMessage } from './messages.js'
 import { UnsupportedAudioFormatError } from '../transcription/transcriber.js'
 
+function extractPropertyCorrelationId(delivery: ConsumeMessage): string | undefined {
+  const raw: unknown = delivery.properties?.correlationId
+  if (typeof raw !== 'string') return undefined
+  if (!raw.trim() || raw.length > 64) return undefined
+  return raw
+}
+
 export async function handleDelivery(channel: Pick<ConfirmChannel, 'sendToQueue' | 'ack' | 'nack' | 'reject'>,
   delivery: ConsumeMessage, resultQueue: string, process: (job: JobMessage, signal: AbortSignal) => Promise<JobResult>,
-  signal: AbortSignal, timeoutMs: number, retryMs: number): Promise<void> {
+  signal: AbortSignal, timeoutMs: number, retryMs: number, logger?: Logger): Promise<void> {
   let job: JobMessage
   try { job = parseJob(delivery.content) }
-  catch { channel.reject(delivery, false); return }
+  catch {
+    logger?.warn('Rejecting malformed job message', {
+      correlation_id: extractPropertyCorrelationId(delivery),
+    })
+    channel.reject(delivery, false)
+    return
+  }
+  const correlation_id = job.correlation_id ?? extractPropertyCorrelationId(delivery)
+  if (correlation_id && !job.correlation_id) {
+    job = { ...job, correlation_id }
+  }
+  const jobLogger = logger?.child({
+    correlation_id,
+    job_id: job.job_id,
+    job_kind: job.kind,
+    redelivered: delivery.fields.redelivered,
+  })
+  const startedAt = performance.now()
+  jobLogger?.info('Job started')
   let result: JobResult
   try {
     result = await process(job, AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]))
+    if (correlation_id && !result.correlation_id) {
+      result = { ...result, correlation_id }
+    }
   } catch (error) {
     if (signal.aborted) return // Closing the connection requeues the unacknowledged delivery.
     const retryable = !(error instanceof UnsupportedAudioFormatError)
+    const duration_ms = Math.max(0, Math.round(performance.now() - startedAt))
     if (retryable && !delivery.fields.redelivered) {
+      jobLogger?.warn('Job requeued after transient failure', { duration_ms, retryable })
       await delay(retryMs, undefined, { signal })
       channel.nack(delivery, false, true)
       return
     }
+    jobLogger?.error('Job failed', error, { duration_ms, retryable })
     result = { job_id: job.job_id, claim_token: job.claim_token, kind: job.kind,
+      ...(correlation_id ? { correlation_id } : {}),
       status: 'failed', error: 'Processing failed. Check provider/storage configuration or retry.', retryable }
   }
   signal.throwIfAborted()
   await new Promise<void>((resolve, reject) => {
     channel.sendToQueue(resultQueue, Buffer.from(JSON.stringify(result)),
-      { persistent: true, contentType: 'application/json', messageId: `${job.job_id}:${job.claim_token}` },
+      {
+        persistent: true,
+        contentType: 'application/json',
+        messageId: `${job.job_id}:${job.claim_token}`,
+        ...(correlation_id ? { correlationId: correlation_id } : {}),
+      },
       (error: unknown) => error ? reject(error) : resolve())
   })
   signal.throwIfAborted()
   channel.ack(delivery)
+  if (result.status === 'completed') {
+    const duration_ms = Math.max(0, Math.round(performance.now() - startedAt))
+    jobLogger?.info('Job completed', { duration_ms })
+  }
 }
 
 export async function runRabbitWorker(config: WorkerConfig, logger: Logger, signal: AbortSignal,
@@ -67,7 +108,7 @@ export async function runRabbitWorker(config: WorkerConfig, logger: Logger, sign
           if (sessionSignal.aborted) return
           const deadline = setTimeout(close, config.jobTimeoutMs + config.rabbit.retryMs + 15_000)
           active = handleDelivery(channel, delivery, config.rabbit.resultQueue, process,
-            sessionSignal, config.jobTimeoutMs, config.rabbit.retryMs)
+            sessionSignal, config.jobTimeoutMs, config.rabbit.retryMs, logger)
             .catch(() => close()).finally(() => clearTimeout(deadline))
         }, { noAck: false })
         logger.info('RabbitMQ consumer ready')

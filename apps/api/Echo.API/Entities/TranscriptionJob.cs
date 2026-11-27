@@ -12,6 +12,7 @@ public class TranscriptionJob
     public int RetryCount { get; set; }
     public int AttemptCount { get; set; }
     public string? ClaimToken { get; set; }
+    public string? CorrelationId { get; set; }
     public DateTime? NextAttemptAt { get; set; }
     public string? FailureReason { get; set; }
 

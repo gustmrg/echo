@@ -1,5 +1,6 @@
 using Echo.API.Database;
 using Echo.API.Enums;
+using Echo.API.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace Echo.API.Features.Recordings;
@@ -10,7 +11,7 @@ public sealed record RetryTranscriptionRequest(int ExpectedRetryCount);
 public static class RetryTranscription
 {
     public static async Task<IResult> Handle(Guid id, RetryTranscriptionRequest request,
-        EchoDbContext db, CancellationToken ct)
+        EchoDbContext db, HttpContext httpContext, CancellationToken ct)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         var recording = await db.Recordings.Include(r => r.TranscriptionJob)
@@ -27,6 +28,7 @@ public static class RetryTranscription
         job.Status = JobStatus.Created;
         job.AttemptCount = 0;
         job.ClaimToken = null;
+        job.CorrelationId = CorrelationId.NormalizeOrNull(httpContext.TraceIdentifier);
         job.NextAttemptAt = null;
         job.FailureReason = null;
         job.UpdatedAt = DateTime.UtcNow;

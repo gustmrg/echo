@@ -43,6 +43,7 @@ public sealed class StorageKeyMigrationTests : IDisposable
 
     public void Dispose()
     {
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         File.Delete(_databasePath);
         File.Delete($"{_databasePath}-shm");
         File.Delete($"{_databasePath}-wal");
